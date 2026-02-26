@@ -5,21 +5,21 @@ Cross-platform system tray app for macOS (Sonoma+) and Windows (10/11) that:
 1. Authenticates users with Supabase OAuth (Google + PKCE via browser)
 2. Watches platform default screenshot folders
 3. Compresses screenshots
-4. Uploads to Supabase Storage (`screenshots` bucket) with filename pattern: `<Date.now()>-<randomBase36>.<originalExtension>`
+4. Uploads screenshots to the Smartshots API (`/api/screenshots`) using the Supabase bearer token
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env
-# fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+# fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (+ optional VITE_API_BASE_URL)
 npm run tauri:dev
 ```
 
 ## Current architecture
 
 - `src-tauri/src/main.rs`: tray menu + screenshot-folder watcher + event emission
-- `src/supabaseService.ts`: auth callback/session handling + compression + storage upload
+- `src/supabaseService.ts`: auth callback/session handling + compression + API upload
 - `src/main.ts`: UI wiring, deep-link callback subscription, watcher control
 
 ## OAuth callback setup

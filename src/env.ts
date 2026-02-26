@@ -2,6 +2,7 @@ export const config = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL as string,
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
   supabaseBucket: (import.meta.env.VITE_SUPABASE_BUCKET as string) || 'screenshots',
+  apiBaseUrl: (import.meta.env.VITE_API_BASE_URL as string) || 'https://www.smartshotsai.com',
   oauthRedirect: (import.meta.env.VITE_OAUTH_REDIRECT as string) || 'smartshots://auth/callback'
 };
 

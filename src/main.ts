@@ -40,6 +40,7 @@ const watcherAutostartToggle = document.querySelector<HTMLInputElement>('#watche
 assertEnv();
 const supabase = new SupabaseService();
 const recentUploads = new Map<string, number>();
+const inFlightUploads = new Set<string>();
 let uploadSequence = 0;
 const store = createStore<AppState>({
   isAuthenticated: false,
@@ -163,22 +164,23 @@ watcherAutostartToggle.addEventListener('change', async () => {
 async function listenForScreenshots(): Promise<void> {
   const unlisten = await listen<WatcherEventPayload>('screenshot-created', async (event) => {
     const filePath = event.payload.path;
-    if (shouldSkipRecent(filePath)) {
+    if (shouldSkipUpload(filePath)) {
       return;
     }
 
+    inFlightUploads.add(filePath);
+    rememberRecent(filePath);
     const seq = ++uploadSequence;
     setUploadStatus(seq, `processing ${filePath}`);
 
     try {
       await delay(700);
       const result = await supabase.uploadScreenshot(filePath);
-      rememberRecent(filePath);
-      setUploadStatus(seq, `uploaded: ${result.objectApiPath}`);
+      setUploadStatus(seq, `uploaded via ${result.endpoint} (HTTP ${result.responseStatus})`);
       console.info('[smartshots] upload ok', {
         filePath,
-        storagePath: result.storagePath,
-        objectApiPath: result.objectApiPath,
+        endpoint: result.endpoint,
+        responseStatus: result.responseStatus,
         sizeBytes: result.sizeBytes,
         contentType: result.contentType
       });
@@ -199,6 +201,8 @@ async function listenForScreenshots(): Promise<void> {
           body: 'Screenshot upload failed. Open app for details.'
         });
       }
+    } finally {
+      inFlightUploads.delete(filePath);
     }
   });
 
@@ -277,10 +281,14 @@ function escapeHtml(text: string): string {
 
 void init();
 
-function shouldSkipRecent(path: string): boolean {
+function shouldSkipUpload(path: string): boolean {
+  if (inFlightUploads.has(path)) {
+    return true;
+  }
+
   const ts = recentUploads.get(path);
   if (!ts) return false;
-  return Date.now() - ts < 3000;
+  return Date.now() - ts < 8000;
 }
 
 function rememberRecent(path: string): void {

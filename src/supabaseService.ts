@@ -2,13 +2,14 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { basename } from '@tauri-apps/api/path';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { fetch as nativeFetch } from '@tauri-apps/plugin-http';
 import imageCompression from 'browser-image-compression';
 import { config } from './env';
 
 export type AuthChangeHandler = (isAuthenticated: boolean) => void;
 export type UploadResult = {
-  storagePath: string;
-  objectApiPath: string;
+  endpoint: string;
+  responseStatus: number;
   contentType: string;
   sizeBytes: number;
 };
@@ -131,29 +132,80 @@ export class SupabaseService {
       initialQuality: 0.85
     });
 
-    const storagePath = `${session.user.id}/${Date.now()}-${randomBase36(8)}.${originalExtension}`;
     const uploadType = compressed.type || originalType || 'application/octet-stream';
+    const compressedFile = new File([compressed], fileName, { type: uploadType });
+    const metadata = {
+      timestamp: Date.now(),
+      source: 'tauri-desktop-app',
+      page_url: '',
+      page_title: 'Screenshot',
+      image_url: ''
+    };
 
-    const { data: uploadData, error } = await this.supabase.storage.from(config.supabaseBucket).upload(storagePath, compressed, {
-      contentType: uploadType,
-      upsert: false,
-      cacheControl: '3600'
+    const response = await this.uploadToApi({
+      accessToken: session.access_token,
+      file: compressedFile,
+      metadata
     });
 
-    if (error) {
-      throw error;
+    if (response.status === 401) {
+      const refreshed = await this.supabase.auth.refreshSession();
+      const refreshedToken = refreshed.data.session?.access_token;
+
+      if (!refreshedToken) {
+        throw new Error('Unauthorized and token refresh failed');
+      }
+
+      const retryResponse = await this.uploadToApi({
+        accessToken: refreshedToken,
+        file: compressedFile,
+        metadata
+      });
+
+      if (!retryResponse.ok) {
+        const body = await safeReadBody(retryResponse);
+        throw new Error(`API upload failed (${retryResponse.status}): ${body}`);
+      }
+
+      return {
+        endpoint: '/api/screenshots',
+        responseStatus: retryResponse.status,
+        contentType: uploadType,
+        sizeBytes: compressedFile.size
+      };
     }
 
-    if (!uploadData?.path) {
-      throw new Error('Supabase upload returned no object path');
+    if (!response.ok) {
+      const body = await safeReadBody(response);
+      throw new Error(`API upload failed (${response.status}): ${body}`);
     }
 
     return {
-      storagePath: uploadData.path,
-      objectApiPath: `/object/${config.supabaseBucket}/${uploadData.path}`,
+      endpoint: '/api/screenshots',
+      responseStatus: response.status,
       contentType: uploadType,
-      sizeBytes: compressed.size
+      sizeBytes: compressedFile.size
     };
+  }
+
+  private async uploadToApi(args: {
+    accessToken: string;
+    file: File;
+    metadata: Record<string, unknown>;
+  }): Promise<Response> {
+    const formData = new FormData();
+    formData.append('screenshots', args.file, args.file.name);
+    formData.append('metadata', JSON.stringify(args.metadata));
+    formData.append('source', 'desktop_app');
+
+    return nativeFetch(`${config.apiBaseUrl}/api/screenshots`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.accessToken}`,
+        Accept: 'application/json'
+      },
+      body: formData
+    });
   }
 }
 
@@ -179,4 +231,13 @@ function randomBase36(length: number): string {
     out += Math.random().toString(36).slice(2);
   }
   return out.slice(0, length);
+}
+
+async function safeReadBody(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    return text || '{}';
+  } catch {
+    return '{}';
+  }
 }

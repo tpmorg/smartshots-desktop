@@ -16,6 +16,14 @@
       ]
     },
     "opener:default",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        "https://www.smartshotsai.com/api/screenshots",
+        "https://www.smartshotsai.com/api/screenshots/*"
+      ]
+    },
     "dialog:default",
     "notification:default",
     "deep-link:default",
