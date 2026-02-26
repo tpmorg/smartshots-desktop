@@ -4,6 +4,9 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { assertEnv } from './env';
 import { SupabaseService } from './supabaseService';
+import { createStore } from './store';
+import { readPreferences, saveNotificationsEnabled, saveWatcherAutostart } from './preferences';
+import './styles.css';
 
 type WatcherEventPayload = {
   path: string;
@@ -13,35 +16,75 @@ type OAuthCallbackPayload = {
   url: string;
 };
 
+type AppState = {
+  isAuthenticated: boolean;
+  authMessage: string;
+  watcherRunning: boolean;
+  watcherMessage: string;
+  uploadMessage: string;
+  notificationsEnabled: boolean;
+  watcherAutostart: boolean;
+  screenshotDirs: string[];
+};
+
 const authStatus = document.querySelector<HTMLParagraphElement>('#auth-status')!;
 const watcherStatus = document.querySelector<HTMLParagraphElement>('#watcher-status')!;
 const uploadStatus = document.querySelector<HTMLParagraphElement>('#upload-status')!;
 const dirsList = document.querySelector<HTMLUListElement>('#dirs-list')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
-const callbackUrlInput = document.querySelector<HTMLInputElement>('#callback-url-input')!;
-const applyCallbackBtn = document.querySelector<HTMLButtonElement>('#apply-callback-btn')!;
 const watcherBtn = document.querySelector<HTMLButtonElement>('#watcher-btn')!;
 const notificationsToggle = document.querySelector<HTMLInputElement>('#notifications-toggle')!;
+const watcherAutostartToggle = document.querySelector<HTMLInputElement>('#watcher-autostart-toggle')!;
 
 assertEnv();
 const supabase = new SupabaseService();
-let watcherRunning = false;
-let notificationsEnabled = false;
+const recentUploads = new Map<string, number>();
+let uploadSequence = 0;
+const store = createStore<AppState>({
+  isAuthenticated: false,
+  authMessage: 'checking...',
+  watcherRunning: false,
+  watcherMessage: 'stopped',
+  uploadMessage: 'idle',
+  notificationsEnabled: false,
+  watcherAutostart: false,
+  screenshotDirs: []
+});
+
+let lastDirsKey = '';
+store.subscribe(render);
+render(store.getState());
 
 async function init(): Promise<void> {
-  const dirs = await invoke<string[]>('get_default_screenshot_dirs');
-  dirs.forEach((dir) => {
-    const li = document.createElement('li');
-    li.textContent = dir;
-    dirsList.appendChild(li);
+  const preferences = await readPreferences();
+  store.setState({
+    notificationsEnabled: preferences.notificationsEnabled,
+    watcherAutostart: preferences.watcherAutostart
   });
 
+  const dirs = await invoke<string[]>('get_default_screenshot_dirs');
+  store.setState({ screenshotDirs: dirs });
+
   const authed = await supabase.isAuthenticated();
-  updateAuthUI(authed);
+  store.setState({
+    isAuthenticated: authed,
+    authMessage: authed ? 'signed in' : 'signed out'
+  });
+
+  if (authed && preferences.watcherAutostart) {
+    await startWatcher();
+  }
 
   supabase.onAuthenticationStateChanged((isAuthenticated) => {
-    updateAuthUI(isAuthenticated);
+    store.setState({
+      isAuthenticated,
+      authMessage: isAuthenticated ? 'signed in' : 'signed out'
+    });
+
+    if (isAuthenticated && store.getState().watcherAutostart && !store.getState().watcherRunning) {
+      void startWatcher();
+    }
   });
 
   await onOpenUrl(async (urls) => {
@@ -61,50 +104,35 @@ async function init(): Promise<void> {
   await listenForScreenshots();
 }
 
-function updateAuthUI(authed: boolean): void {
-  authStatus.textContent = authed ? 'Auth: signed in' : 'Auth: signed out';
-  signinBtn.disabled = authed;
-  signoutBtn.disabled = !authed;
-}
-
 signinBtn.addEventListener('click', async () => {
-  authStatus.textContent = 'Auth: opening browser... if callback does not return, paste URL below.';
+  store.setState({ authMessage: 'opening browser...' });
+
   try {
     const redirectTo = await invoke<string>('get_oauth_redirect_url');
     await supabase.beginOAuthSignInWithRedirect(redirectTo);
   } catch (error) {
-    authStatus.textContent = `Auth: failed (${String(error)})`;
+    store.setState({ authMessage: `failed (${String(error)})` });
   }
 });
 
 signoutBtn.addEventListener('click', async () => {
   try {
+    await stopWatcher();
     await supabase.signOut();
-    updateAuthUI(false);
+    store.setState({
+      isAuthenticated: false,
+      authMessage: 'signed out'
+    });
   } catch (error) {
-    authStatus.textContent = `Auth: sign-out failed (${String(error)})`;
+    store.setState({ authMessage: `sign-out failed (${String(error)})` });
   }
 });
 
-applyCallbackBtn.addEventListener('click', async () => {
-  await handleIncomingAuthUrl(callbackUrlInput.value.trim());
-});
-
 watcherBtn.addEventListener('click', async () => {
-  try {
-    if (!watcherRunning) {
-      await invoke('start_screenshot_watcher');
-      watcherRunning = true;
-      watcherStatus.textContent = 'Watcher: running';
-      watcherBtn.textContent = 'Stop watcher';
-    } else {
-      await invoke('stop_screenshot_watcher');
-      watcherRunning = false;
-      watcherStatus.textContent = 'Watcher: stopped';
-      watcherBtn.textContent = 'Start watcher';
-    }
-  } catch (error) {
-    watcherStatus.textContent = `Watcher: error (${String(error)})`;
+  if (store.getState().watcherRunning) {
+    await stopWatcher();
+  } else {
+    await startWatcher();
   }
 });
 
@@ -116,32 +144,56 @@ notificationsToggle.addEventListener('change', async () => {
       permissionGranted = permission === 'granted';
     }
 
-    notificationsEnabled = permissionGranted;
+    store.setState({ notificationsEnabled: permissionGranted });
     notificationsToggle.checked = permissionGranted;
-  } else {
-    notificationsEnabled = false;
+    await saveNotificationsEnabled(permissionGranted);
+    return;
   }
+
+  store.setState({ notificationsEnabled: false });
+  await saveNotificationsEnabled(false);
+});
+
+watcherAutostartToggle.addEventListener('change', async () => {
+  const enabled = watcherAutostartToggle.checked;
+  store.setState({ watcherAutostart: enabled });
+  await saveWatcherAutostart(enabled);
 });
 
 async function listenForScreenshots(): Promise<void> {
   const unlisten = await listen<WatcherEventPayload>('screenshot-created', async (event) => {
     const filePath = event.payload.path;
-    uploadStatus.textContent = `Uploads: processing ${filePath}`;
+    if (shouldSkipRecent(filePath)) {
+      return;
+    }
+
+    const seq = ++uploadSequence;
+    setUploadStatus(seq, `processing ${filePath}`);
 
     try {
-      await supabase.uploadScreenshot(filePath);
-      uploadStatus.textContent = `Uploads: uploaded ${filePath}`;
+      await delay(700);
+      const result = await supabase.uploadScreenshot(filePath);
+      rememberRecent(filePath);
+      setUploadStatus(seq, `uploaded: ${result.objectApiPath}`);
+      console.info('[smartshots] upload ok', {
+        filePath,
+        storagePath: result.storagePath,
+        objectApiPath: result.objectApiPath,
+        sizeBytes: result.sizeBytes,
+        contentType: result.contentType
+      });
 
-      if (notificationsEnabled) {
+      if (store.getState().notificationsEnabled) {
         await sendNotification({
           title: 'Smartshots',
           body: 'Screenshot uploaded successfully.'
         });
       }
     } catch (error) {
-      uploadStatus.textContent = `Uploads: failed (${String(error)})`;
+      setUploadStatus(seq, `failed (${toErrorMessage(error)})`);
+      console.error('[smartshots] upload failed', { filePath, error });
 
-      if (notificationsEnabled) {
+      if (store.getState().notificationsEnabled) {
         await sendNotification({
           title: 'Smartshots',
           body: 'Screenshot upload failed. Open app for details.'
@@ -155,10 +207,107 @@ async function listenForScreenshots(): Promise<void> {
   });
 }
 
-void init();
-
 async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
   if (!url) return;
+
   const ok = await supabase.handleAuthCallback(url);
-  authStatus.textContent = ok ? 'Auth: signed in' : 'Auth: callback failed';
+  if (!ok) {
+    store.setState({ authMessage: 'callback failed' });
+    return;
+  }
+
+  store.setState({
+    isAuthenticated: true,
+    authMessage: 'signed in'
+  });
+
+  if (store.getState().watcherAutostart && !store.getState().watcherRunning) {
+    await startWatcher();
+  }
+}
+
+async function startWatcher(): Promise<void> {
+  try {
+    await invoke('start_screenshot_watcher');
+    store.setState({ watcherRunning: true, watcherMessage: 'running' });
+  } catch (error) {
+    store.setState({ watcherMessage: `error (${String(error)})` });
+  }
+}
+
+async function stopWatcher(): Promise<void> {
+  try {
+    await invoke('stop_screenshot_watcher');
+    store.setState({ watcherRunning: false, watcherMessage: 'stopped' });
+  } catch (error) {
+    store.setState({ watcherMessage: `error (${String(error)})` });
+  }
+}
+
+function render(state: AppState): void {
+  authStatus.innerHTML = `<strong>Auth:</strong> ${escapeHtml(state.authMessage)}`;
+  watcherStatus.innerHTML = `<strong>Watcher:</strong> ${escapeHtml(state.watcherMessage)}`;
+  uploadStatus.innerHTML = `<strong>Uploads:</strong> ${escapeHtml(state.uploadMessage)}`;
+
+  signinBtn.hidden = state.isAuthenticated;
+  signoutBtn.hidden = !state.isAuthenticated;
+  watcherBtn.textContent = state.watcherRunning ? 'Stop watcher' : 'Start watcher';
+  watcherBtn.disabled = !state.isAuthenticated;
+  notificationsToggle.checked = state.notificationsEnabled;
+  watcherAutostartToggle.checked = state.watcherAutostart;
+
+  const dirsKey = state.screenshotDirs.join('|');
+  if (dirsKey !== lastDirsKey) {
+    dirsList.replaceChildren();
+    state.screenshotDirs.forEach((dir) => {
+      const li = document.createElement('li');
+      li.textContent = dir;
+      dirsList.appendChild(li);
+    });
+    lastDirsKey = dirsKey;
+  }
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+void init();
+
+function shouldSkipRecent(path: string): boolean {
+  const ts = recentUploads.get(path);
+  if (!ts) return false;
+  return Date.now() - ts < 3000;
+}
+
+function rememberRecent(path: string): void {
+  const now = Date.now();
+  recentUploads.set(path, now);
+
+  for (const [key, ts] of recentUploads.entries()) {
+    if (now - ts > 15000) {
+      recentUploads.delete(key);
+    }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function setUploadStatus(seq: number, message: string): void {
+  if (seq !== uploadSequence) {
+    return;
+  }
+  store.setState({ uploadMessage: message });
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
 }

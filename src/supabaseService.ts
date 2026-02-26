@@ -6,6 +6,12 @@ import imageCompression from 'browser-image-compression';
 import { config } from './env';
 
 export type AuthChangeHandler = (isAuthenticated: boolean) => void;
+export type UploadResult = {
+  storagePath: string;
+  objectApiPath: string;
+  contentType: string;
+  sizeBytes: number;
+};
 
 export class SupabaseService {
   private supabase: SupabaseClient;
@@ -102,7 +108,7 @@ export class SupabaseService {
     }
   }
 
-  async uploadScreenshot(filePath: string): Promise<void> {
+  async uploadScreenshot(filePath: string): Promise<UploadResult> {
     const { data } = await this.supabase.auth.getSession();
     const session = data.session;
 
@@ -125,10 +131,10 @@ export class SupabaseService {
       initialQuality: 0.85
     });
 
-    const storagePath = `${Date.now()}-${randomBase36(8)}.${originalExtension}`;
+    const storagePath = `${session.user.id}/${Date.now()}-${randomBase36(8)}.${originalExtension}`;
     const uploadType = compressed.type || originalType || 'application/octet-stream';
 
-    const { error } = await this.supabase.storage.from(config.supabaseBucket).upload(storagePath, compressed, {
+    const { data: uploadData, error } = await this.supabase.storage.from(config.supabaseBucket).upload(storagePath, compressed, {
       contentType: uploadType,
       upsert: false,
       cacheControl: '3600'
@@ -137,6 +143,17 @@ export class SupabaseService {
     if (error) {
       throw error;
     }
+
+    if (!uploadData?.path) {
+      throw new Error('Supabase upload returned no object path');
+    }
+
+    return {
+      storagePath: uploadData.path,
+      objectApiPath: `/object/${config.supabaseBucket}/${uploadData.path}`,
+      contentType: uploadType,
+      sizeBytes: compressed.size
+    };
   }
 }
 

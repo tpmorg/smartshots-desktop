@@ -160,6 +160,10 @@ fn is_image_file(path: &Path) -> bool {
     };
 
     let lower_name = name.to_lowercase();
+    if lower_name.starts_with('.') {
+        return false;
+    }
+
     let extension_match = lower_name.ends_with(".png")
         || lower_name.ends_with(".jpg")
         || lower_name.ends_with(".jpeg")
@@ -305,6 +309,7 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .manage(SharedState {
             watcher: Arc::new(Mutex::new(WatcherState::default())),
             oauth_listener_started: Arc::new(Mutex::new(false)),

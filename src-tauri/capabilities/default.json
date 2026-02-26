@@ -6,9 +6,19 @@
   "permissions": [
     "core:default",
     "fs:default",
+    {
+      "identifier": "fs:allow-read-file",
+      "allow": [
+        "$DESKTOP/*",
+        "$DESKTOP/**",
+        "$PICTURE/Screenshots/*",
+        "$PICTURE/Screenshots/**"
+      ]
+    },
     "opener:default",
     "dialog:default",
     "notification:default",
-    "deep-link:default"
+    "deep-link:default",
+    "store:default"
   ]
 }
