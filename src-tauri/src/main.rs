@@ -11,7 +11,7 @@ use std::{
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, State};
+use tauri::{menu::{Menu, MenuItem, Submenu}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use url::form_urlencoded;
 
@@ -282,31 +282,27 @@ fn extract_capture_url(path_and_query: &str) -> Option<String> {
 }
 
 fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
-    println!("[tray] creating tray icon and menu");
     let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
     let website = MenuItem::with_id(app, "website", "Go to Website", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&settings, &website, &quit])?;
+    let actions = Submenu::with_items(app, "Smartshots", true, &[&settings, &website, &quit])?;
+    let menu = Menu::with_items(app, &[&actions])?;
 
     TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
-            println!("[tray] menu item selected: {}", event.id().as_ref());
             match event.id().as_ref() {
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
-                        println!("[tray] opening settings window from menu");
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
                 }
                 "website" => {
-                    println!("[tray] opening website from menu");
                     let _ = app.opener().open_url("https://www.smartshotsai.com", None::<&str>);
                 }
                 "quit" => {
-                    println!("[tray] quitting app from menu");
                     app.exit(0);
                 }
                 _ => {}
@@ -334,7 +330,6 @@ fn main() {
         })
         .setup(|app| {
             create_tray(app.handle())?;
-            println!("[tray] setup complete");
             app.on_tray_icon_event(|_app_handle, event| {
                 if let TrayIconEvent::Click {
                     button,
@@ -342,9 +337,11 @@ fn main() {
                     ..
                 } = event
                 {
-                    println!("[tray] click event: button={button:?} state={button_state:?}");
-                    if button == MouseButton::Right && button_state == MouseButtonState::Down {
-                        println!("right click pressed down");
+                    if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                        if let Some(window) = _app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
                     }
                 }
             });
