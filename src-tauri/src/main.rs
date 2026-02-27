@@ -12,6 +12,7 @@ use std::{
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 use url::form_urlencoded;
 
 #[derive(Default)]
@@ -24,6 +25,7 @@ struct WatcherState {
 struct SharedState {
     watcher: Arc<Mutex<WatcherState>>,
     oauth_listener_started: Arc<Mutex<bool>>,
+    hide_to_tray_on_close: Arc<Mutex<bool>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -98,6 +100,28 @@ fn get_oauth_redirect_url(app: AppHandle, state: State<'_, SharedState>) -> Resu
     }
 
     Ok("http://127.0.0.1:38965/auth/callback".to_string())
+}
+
+#[tauri::command]
+fn set_hide_to_tray_on_close(enabled: bool, state: State<'_, SharedState>) -> Result<(), String> {
+    let mut setting = state
+        .hide_to_tray_on_close
+        .lock()
+        .map_err(|_| "hide_to_tray_on_close lock poisoned")?;
+    *setting = enabled;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_website(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url("https://www.smartshotsai.com", None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
 }
 
 fn run_watcher_thread(
@@ -258,46 +282,38 @@ fn extract_capture_url(path_and_query: &str) -> Option<String> {
 }
 
 fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
-    let open = MenuItem::with_id(app, "open", "Open Smartshots", true, None::<&str>)?;
+    println!("[tray] creating tray icon and menu");
+    let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let website = MenuItem::with_id(app, "website", "Go to Website", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let menu = Menu::with_items(app, &[&settings, &website, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
+            println!("[tray] menu item selected: {}", event.id().as_ref());
             match event.id().as_ref() {
-                "open" => {
+                "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
+                        println!("[tray] opening settings window from menu");
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
                 }
+                "website" => {
+                    println!("[tray] opening website from menu");
+                    let _ = app.opener().open_url("https://www.smartshotsai.com", None::<&str>);
+                }
                 "quit" => {
+                    println!("[tray] quitting app from menu");
                     app.exit(0);
                 }
                 _ => {}
             }
         })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
-                    let is_visible = window.is_visible().unwrap_or(true);
-                    if is_visible {
-                        let _ = window.hide();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
-            }
-        })
-        .build(app)?;
+        .build(app)?
+        .set_show_menu_on_left_click(true)?;
 
     Ok(())
 }
@@ -314,16 +330,47 @@ fn main() {
         .manage(SharedState {
             watcher: Arc::new(Mutex::new(WatcherState::default())),
             oauth_listener_started: Arc::new(Mutex::new(false)),
+            hide_to_tray_on_close: Arc::new(Mutex::new(true)),
         })
         .setup(|app| {
             create_tray(app.handle())?;
+            println!("[tray] setup complete");
+            app.on_tray_icon_event(|_app_handle, event| {
+                if let TrayIconEvent::Click {
+                    button,
+                    button_state,
+                    ..
+                } = event
+                {
+                    println!("[tray] click event: button={button:?} state={button_state:?}");
+                    if button == MouseButton::Right && button_state == MouseButtonState::Down {
+                        println!("right click pressed down");
+                    }
+                }
+            });
+            if let Some(window) = app.get_webview_window("main") {
+                let window_for_close = window.clone();
+                let hide_to_tray_state = app.state::<SharedState>().hide_to_tray_on_close.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        let should_hide = hide_to_tray_state.lock().map(|v| *v).unwrap_or(true);
+                        if should_hide {
+                            api.prevent_close();
+                            let _ = window_for_close.hide();
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_default_screenshot_dirs,
             start_screenshot_watcher,
             stop_screenshot_watcher,
-            get_oauth_redirect_url
+            get_oauth_redirect_url,
+            set_hide_to_tray_on_close,
+            open_website,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

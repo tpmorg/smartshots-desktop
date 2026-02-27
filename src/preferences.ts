@@ -3,15 +3,18 @@ import { load } from '@tauri-apps/plugin-store';
 const STORE_FILE = 'preferences.json';
 const KEY_NOTIFICATIONS = 'notificationsEnabled';
 const KEY_WATCHER_AUTOSTART = 'watcherAutostart';
+const KEY_HIDE_TO_TRAY_ON_CLOSE = 'hideToTrayOnClose';
 
 export type Preferences = {
   notificationsEnabled: boolean;
   watcherAutostart: boolean;
+  hideToTrayOnClose: boolean;
 };
 
 const DEFAULT_PREFERENCES: Preferences = {
   notificationsEnabled: false,
-  watcherAutostart: false
+  watcherAutostart: false,
+  hideToTrayOnClose: true
 };
 
 let storePromise: ReturnType<typeof load> | null = null;
@@ -28,10 +31,15 @@ export async function readPreferences(): Promise<Preferences> {
 
   const notificationsEnabled = normalizeBool(await store.get(KEY_NOTIFICATIONS), DEFAULT_PREFERENCES.notificationsEnabled);
   const watcherAutostart = normalizeBool(await store.get(KEY_WATCHER_AUTOSTART), DEFAULT_PREFERENCES.watcherAutostart);
+  const hideToTrayOnClose = normalizeBool(
+    await store.get(KEY_HIDE_TO_TRAY_ON_CLOSE),
+    DEFAULT_PREFERENCES.hideToTrayOnClose
+  );
 
   return {
     notificationsEnabled,
-    watcherAutostart
+    watcherAutostart,
+    hideToTrayOnClose
   };
 }
 
@@ -44,6 +52,12 @@ export async function saveNotificationsEnabled(value: boolean): Promise<void> {
 export async function saveWatcherAutostart(value: boolean): Promise<void> {
   const store = await getStore();
   await store.set(KEY_WATCHER_AUTOSTART, value);
+  await store.save();
+}
+
+export async function saveHideToTrayOnClose(value: boolean): Promise<void> {
+  const store = await getStore();
+  await store.set(KEY_HIDE_TO_TRAY_ON_CLOSE, value);
   await store.save();
 }
 

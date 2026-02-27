@@ -13,6 +13,12 @@
         <p class="status" id="watcher-status">Watcher: stopped</p>
         <p class="status" id="upload-status">Uploads: idle</p>
       </div>
+      <div class="upload-progress" id="upload-progress" hidden>
+        <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
+        <div class="upload-progress__track">
+          <div class="upload-progress__fill" id="upload-progress-fill"></div>
+        </div>
+      </div>
 
       <div class="row">
         <button id="signin-btn">Sign in with Google</button>
@@ -35,6 +41,18 @@
           <input id="watcher-autostart-toggle" type="checkbox" />
           Auto-start watcher after app launch
         </label>
+      </div>
+
+      <div class="row">
+        <label>
+          <input id="hide-to-tray-toggle" type="checkbox" />
+          Hide window to tray when closing
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="website-btn" class="secondary">Go to Website</button>
+        <button id="quit-btn" class="secondary">Quit App</button>
       </div>
 
       <p class="section-title">Default screenshot directories</p>

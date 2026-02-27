@@ -5,7 +5,7 @@ import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { assertEnv } from './env';
 import { SupabaseService } from './supabaseService';
 import { createStore } from './store';
-import { readPreferences, saveNotificationsEnabled, saveWatcherAutostart } from './preferences';
+import { readPreferences, saveHideToTrayOnClose, saveNotificationsEnabled, saveWatcherAutostart } from './preferences';
 import './styles.css';
 
 type WatcherEventPayload = {
@@ -22,34 +22,47 @@ type AppState = {
   watcherRunning: boolean;
   watcherMessage: string;
   uploadMessage: string;
+  uploadProgress: number;
+  uploadInProgress: boolean;
   notificationsEnabled: boolean;
   watcherAutostart: boolean;
+  hideToTrayOnClose: boolean;
   screenshotDirs: string[];
 };
 
 const authStatus = document.querySelector<HTMLParagraphElement>('#auth-status')!;
 const watcherStatus = document.querySelector<HTMLParagraphElement>('#watcher-status')!;
 const uploadStatus = document.querySelector<HTMLParagraphElement>('#upload-status')!;
+const uploadProgress = document.querySelector<HTMLDivElement>('#upload-progress')!;
+const uploadProgressLabel = document.querySelector<HTMLDivElement>('#upload-progress-label')!;
+const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progress-fill')!;
 const dirsList = document.querySelector<HTMLUListElement>('#dirs-list')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
 const watcherBtn = document.querySelector<HTMLButtonElement>('#watcher-btn')!;
 const notificationsToggle = document.querySelector<HTMLInputElement>('#notifications-toggle')!;
 const watcherAutostartToggle = document.querySelector<HTMLInputElement>('#watcher-autostart-toggle')!;
+const hideToTrayToggle = document.querySelector<HTMLInputElement>('#hide-to-tray-toggle')!;
+const websiteBtn = document.querySelector<HTMLButtonElement>('#website-btn')!;
+const quitBtn = document.querySelector<HTMLButtonElement>('#quit-btn')!;
 
 assertEnv();
 const supabase = new SupabaseService();
 const recentUploads = new Map<string, number>();
 const inFlightUploads = new Set<string>();
 let uploadSequence = 0;
+let uploadProgressTimer: number | null = null;
 const store = createStore<AppState>({
   isAuthenticated: false,
   authMessage: 'checking...',
   watcherRunning: false,
   watcherMessage: 'stopped',
   uploadMessage: 'idle',
+  uploadProgress: 0,
+  uploadInProgress: false,
   notificationsEnabled: false,
   watcherAutostart: false,
+  hideToTrayOnClose: true,
   screenshotDirs: []
 });
 
@@ -61,8 +74,10 @@ async function init(): Promise<void> {
   const preferences = await readPreferences();
   store.setState({
     notificationsEnabled: preferences.notificationsEnabled,
-    watcherAutostart: preferences.watcherAutostart
+    watcherAutostart: preferences.watcherAutostart,
+    hideToTrayOnClose: preferences.hideToTrayOnClose
   });
+  await invoke('set_hide_to_tray_on_close', { enabled: preferences.hideToTrayOnClose });
 
   const dirs = await invoke<string[]>('get_default_screenshot_dirs');
   store.setState({ screenshotDirs: dirs });
@@ -161,6 +176,21 @@ watcherAutostartToggle.addEventListener('change', async () => {
   await saveWatcherAutostart(enabled);
 });
 
+hideToTrayToggle.addEventListener('change', async () => {
+  const enabled = hideToTrayToggle.checked;
+  store.setState({ hideToTrayOnClose: enabled });
+  await invoke('set_hide_to_tray_on_close', { enabled });
+  await saveHideToTrayOnClose(enabled);
+});
+
+websiteBtn.addEventListener('click', async () => {
+  await invoke('open_website');
+});
+
+quitBtn.addEventListener('click', async () => {
+  await invoke('quit_app');
+});
+
 async function listenForScreenshots(): Promise<void> {
   const unlisten = await listen<WatcherEventPayload>('screenshot-created', async (event) => {
     const filePath = event.payload.path;
@@ -171,12 +201,14 @@ async function listenForScreenshots(): Promise<void> {
     inFlightUploads.add(filePath);
     rememberRecent(filePath);
     const seq = ++uploadSequence;
+    beginUploadProgress(seq);
     setUploadStatus(seq, `processing ${filePath}`);
 
     try {
       await delay(700);
       const result = await supabase.uploadScreenshot(filePath);
       setUploadStatus(seq, `uploaded via ${result.endpoint} (HTTP ${result.responseStatus})`);
+      completeUploadProgress(seq);
       console.info('[smartshots] upload ok', {
         filePath,
         endpoint: result.endpoint,
@@ -193,6 +225,7 @@ async function listenForScreenshots(): Promise<void> {
       }
     } catch (error) {
       setUploadStatus(seq, `failed (${toErrorMessage(error)})`);
+      failUploadProgress(seq);
       console.error('[smartshots] upload failed', { filePath, error });
 
       if (store.getState().notificationsEnabled) {
@@ -252,6 +285,13 @@ function render(state: AppState): void {
   authStatus.innerHTML = `<strong>Auth:</strong> ${escapeHtml(state.authMessage)}`;
   watcherStatus.innerHTML = `<strong>Watcher:</strong> ${escapeHtml(state.watcherMessage)}`;
   uploadStatus.innerHTML = `<strong>Uploads:</strong> ${escapeHtml(state.uploadMessage)}`;
+  uploadProgress.hidden = !state.uploadInProgress && state.uploadProgress <= 0;
+  uploadProgressLabel.textContent = state.uploadInProgress
+    ? `Uploading... ${Math.round(state.uploadProgress)}%`
+    : state.uploadProgress > 0
+      ? `Upload complete`
+      : 'Uploading...';
+  uploadProgressFill.style.width = `${Math.max(0, Math.min(100, state.uploadProgress))}%`;
 
   signinBtn.hidden = state.isAuthenticated;
   signoutBtn.hidden = !state.isAuthenticated;
@@ -259,6 +299,7 @@ function render(state: AppState): void {
   watcherBtn.disabled = !state.isAuthenticated;
   notificationsToggle.checked = state.notificationsEnabled;
   watcherAutostartToggle.checked = state.watcherAutostart;
+  hideToTrayToggle.checked = state.hideToTrayOnClose;
 
   const dirsKey = state.screenshotDirs.join('|');
   if (dirsKey !== lastDirsKey) {
@@ -280,6 +321,61 @@ function escapeHtml(text: string): string {
 }
 
 void init();
+
+function beginUploadProgress(seq: number): void {
+  clearUploadProgressTimer();
+  if (seq !== uploadSequence) return;
+
+  store.setState({
+    uploadInProgress: true,
+    uploadProgress: 8
+  });
+
+  uploadProgressTimer = window.setInterval(() => {
+    if (seq !== uploadSequence) {
+      clearUploadProgressTimer();
+      return;
+    }
+
+    const current = store.getState().uploadProgress;
+    if (current >= 90) {
+      return;
+    }
+
+    const increment = Math.max(1, Math.round((90 - current) * 0.12));
+    store.setState({ uploadProgress: Math.min(90, current + increment) });
+  }, 220);
+}
+
+function completeUploadProgress(seq: number): void {
+  if (seq !== uploadSequence) return;
+  clearUploadProgressTimer();
+  store.setState({
+    uploadInProgress: false,
+    uploadProgress: 100
+  });
+
+  window.setTimeout(() => {
+    if (seq !== uploadSequence) return;
+    store.setState({ uploadProgress: 0 });
+  }, 1200);
+}
+
+function failUploadProgress(seq: number): void {
+  if (seq !== uploadSequence) return;
+  clearUploadProgressTimer();
+  store.setState({
+    uploadInProgress: false,
+    uploadProgress: 0
+  });
+}
+
+function clearUploadProgressTimer(): void {
+  if (uploadProgressTimer !== null) {
+    window.clearInterval(uploadProgressTimer);
+    uploadProgressTimer = null;
+  }
+}
 
 function shouldSkipUpload(path: string): boolean {
   if (inFlightUploads.has(path)) {
