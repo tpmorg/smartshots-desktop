@@ -156,6 +156,21 @@ export async function pruneUploadHistory(): Promise<void> {
   }
 }
 
+export async function getRecentUploadedEntries(
+  limit = 20
+): Promise<Array<{ filePath: string; uploadedAt: number }>> {
+  const cache = await getCache();
+
+  return Object.values(cache.data.byPath)
+    .filter((record) => record.status === 'uploaded')
+    .map((record) => ({
+      filePath: record.filePath,
+      uploadedAt: record.uploadedAt ?? record.lastAttemptAt
+    }))
+    .sort((a, b) => b.uploadedAt - a.uploadedAt)
+    .slice(0, Math.max(1, limit));
+}
+
 async function pruneUploadHistoryInternal(cache: Cache): Promise<boolean> {
   const now = Date.now();
   const entries = Object.entries(cache.data.byPath);

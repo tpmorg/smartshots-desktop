@@ -16,6 +16,7 @@ import {
   saveWatcherAutostart
 } from './preferences';
 import {
+  getRecentUploadedEntries,
   getUnprocessedPaths,
   hasUploaded,
   hasIgnored,
@@ -34,7 +35,7 @@ type OAuthCallbackPayload = {
   url: string;
 };
 
-type AppView = 'dashboard' | 'settings';
+type AppView = 'dashboard' | 'history' | 'settings';
 
 type AppState = {
   activeView: AppView;
@@ -71,8 +72,10 @@ const watcherCard = document.querySelector<HTMLElement>('#watcher-card')!;
 const recentUploadsList = document.querySelector<HTMLUListElement>('#recent-uploads-list')!;
 const recentUploadsEmpty = document.querySelector<HTMLDivElement>('#recent-uploads-empty')!;
 const viewDashboard = document.querySelector<HTMLElement>('#view-dashboard')!;
+const viewHistory = document.querySelector<HTMLElement>('#view-history')!;
 const viewSettings = document.querySelector<HTMLElement>('#view-settings')!;
 const navDashboardBtn = document.querySelector<HTMLButtonElement>('#nav-dashboard-btn')!;
+const navHistoryBtn = document.querySelector<HTMLButtonElement>('#nav-history-btn')!;
 const navSettingsBtn = document.querySelector<HTMLButtonElement>('#nav-settings-btn')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
@@ -143,6 +146,15 @@ async function init(): Promise<void> {
   const dirs = await invoke<string[]>('get_default_screenshot_dirs');
   store.setState({ screenshotDirs: dirs });
   await pruneUploadHistory();
+  const recentPersisted = await getRecentUploadedEntries(25);
+  const recentUploadLog = await Promise.all(
+    recentPersisted.map(async (entry) => ({
+      name: await basename(entry.filePath).catch(() => entry.filePath.split(/[\\/]/).pop() ?? entry.filePath),
+      path: entry.filePath,
+      ts: entry.uploadedAt
+    }))
+  );
+  store.setState({ recentUploadLog });
 
   if (preferences.reviewBacklogOnLaunch) {
     await refreshBacklogCandidates();
@@ -235,6 +247,10 @@ watcherBtn.addEventListener('click', async () => {
 
 navDashboardBtn.addEventListener('click', () => {
   store.setState({ activeView: 'dashboard' });
+});
+
+navHistoryBtn.addEventListener('click', () => {
+  store.setState({ activeView: 'history' });
 });
 
 navSettingsBtn.addEventListener('click', () => {
@@ -509,6 +525,8 @@ async function stopWatcher(): Promise<void> {
 function render(state: AppState): void {
   const isAuthed = state.isAuthenticated;
   const onDashboard = state.activeView === 'dashboard';
+  const onHistory = state.activeView === 'history';
+  const onSettings = state.activeView === 'settings';
 
   signedInAs.textContent = state.signedInUserLabel ? `Signed in as ${state.signedInUserLabel}` : '';
   signedInAs.hidden = !isAuthed || !state.signedInUserLabel;
@@ -519,9 +537,11 @@ function render(state: AppState): void {
   authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
   authChip.classList.toggle('auth-chip--ok', isAuthed);
   viewDashboard.hidden = !onDashboard;
-  viewSettings.hidden = onDashboard;
+  viewHistory.hidden = !onHistory;
+  viewSettings.hidden = !onSettings;
   navDashboardBtn.classList.toggle('nav-item--active', onDashboard);
-  navSettingsBtn.classList.toggle('nav-item--active', !onDashboard);
+  navHistoryBtn.classList.toggle('nav-item--active', onHistory);
+  navSettingsBtn.classList.toggle('nav-item--active', onSettings);
   uploadProgress.classList.toggle('upload-progress--active', state.uploadInProgress);
   uploadProgress.classList.toggle(
     'upload-progress--complete',
