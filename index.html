@@ -52,12 +52,11 @@
             </article>
           </section>
 
-          <section class="queue-section">
-            <div class="section-row">
-              <p class="section-title">Default Screenshot Directories</p>
-              <button id="watcher-btn" class="secondary">Start watcher</button>
+          <section class="upload-progress" id="upload-progress" hidden>
+            <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
+            <div class="upload-progress__track">
+              <div class="upload-progress__fill" id="upload-progress-fill"></div>
             </div>
-            <ul id="dirs-list" class="dirs-list"></ul>
           </section>
 
           <section class="queue-section">
@@ -84,13 +83,6 @@
           <section class="action-row">
             <button id="signin-btn">Sign in with Google</button>
             <button id="signout-btn" class="secondary">Sign out</button>
-          </section>
-
-          <section class="upload-progress" id="upload-progress" hidden>
-            <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
-            <div class="upload-progress__track">
-              <div class="upload-progress__fill" id="upload-progress-fill"></div>
-            </div>
           </section>
         </section>
 
@@ -153,6 +145,13 @@
                 </span>
               </label>
             </div>
+          </section>
+          <section class="queue-section">
+            <div class="section-row">
+              <p class="section-title">Default Screenshot Directories</p>
+              <button id="watcher-btn" class="secondary">Start watcher</button>
+            </div>
+            <ul id="dirs-list" class="dirs-list"></ul>
           </section>
           <div class="settings-actions">
             <button id="website-btn" class="secondary">Go to Website</button>
