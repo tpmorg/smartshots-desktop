@@ -129,10 +129,8 @@ export class SupabaseService {
   }
 
   async uploadScreenshot(filePath: string): Promise<UploadResult> {
-    const { data } = await this.supabase.auth.getSession();
-    const session = data.session;
-
-    if (!session?.user) {
+    const accessToken = await this.getValidAccessToken();
+    if (!accessToken) {
       throw new Error('Not authenticated');
     }
 
@@ -153,26 +151,26 @@ export class SupabaseService {
 
     const uploadType = compressed.type || originalType || 'application/octet-stream';
     const compressedFile = new File([compressed], fileName, { type: uploadType });
+    const uploadSource = getUploadSource();
     const metadata = {
       timestamp: Date.now(),
-      source: 'tauri-desktop-app',
+      source: uploadSource,
       page_url: '',
       page_title: 'Screenshot',
       image_url: ''
     };
 
     const response = await this.uploadToApi({
-      accessToken: session.access_token,
+      accessToken,
       file: compressedFile,
       metadata
     });
 
-    if (response.status === 401) {
-      const refreshed = await this.supabase.auth.refreshSession();
-      const refreshedToken = refreshed.data.session?.access_token;
-
+    if (response.status === 401 || response.status === 403) {
+      const refreshedToken = await this.refreshAccessToken();
       if (!refreshedToken) {
-        throw new Error('Unauthorized and token refresh failed');
+        const body = await safeReadBody(response);
+        throw new Error(`API upload failed (${response.status}): ${body}`);
       }
 
       const retryResponse = await this.uploadToApi({
@@ -207,6 +205,53 @@ export class SupabaseService {
     };
   }
 
+  private async getValidAccessToken(): Promise<string | null> {
+    const { data } = await this.supabase.auth.getSession();
+    const session = data.session;
+
+    if (!session?.user) {
+      return null;
+    }
+
+    if (session.access_token) {
+      const userCheck = await this.supabase.auth.getUser(session.access_token);
+      if (!userCheck.error && userCheck.data.user) {
+        if (!session.expires_at) {
+          return session.access_token;
+        }
+
+        const expiresAtMs = Number(session.expires_at) * 1000;
+        const safeUntilMs = Date.now() + 20_000;
+        if (!Number.isNaN(expiresAtMs) && expiresAtMs > safeUntilMs) {
+          return session.access_token;
+        }
+      }
+    }
+
+    const refreshedByGetUser = await this.supabase.auth.refreshSession();
+    if (refreshedByGetUser.data.session?.access_token) {
+      return refreshedByGetUser.data.session.access_token;
+    }
+
+    if (!session.expires_at) {
+      return session.access_token;
+    }
+
+    const expiresAtMs = Number(session.expires_at) * 1000;
+    const safeUntilMs = Date.now() + 20_000;
+    if (!Number.isNaN(expiresAtMs) && expiresAtMs > safeUntilMs) {
+      return session.access_token;
+    }
+
+    const refreshed = await this.supabase.auth.refreshSession();
+    return refreshed.data.session?.access_token ?? null;
+  }
+
+  private async refreshAccessToken(): Promise<string | null> {
+    const refreshed = await this.supabase.auth.refreshSession();
+    return refreshed.data.session?.access_token ?? null;
+  }
+
   private async uploadToApi(args: {
     accessToken: string;
     file: File;
@@ -215,7 +260,7 @@ export class SupabaseService {
     const formData = new FormData();
     formData.append('screenshots', args.file, args.file.name);
     formData.append('metadata', JSON.stringify(args.metadata));
-    formData.append('source', 'desktop_app');
+    formData.append('source', getUploadSource());
 
     return nativeFetch(`${config.apiBaseUrl}/api/screenshots`, {
       method: 'POST',
@@ -242,6 +287,20 @@ function getExtension(name: string): string {
     return 'bin';
   }
   return name.slice(idx + 1).toLowerCase();
+}
+
+function getUploadSource(): 'mac_app' | 'win_app' | 'desktop_app' {
+  const userAgent = navigator.userAgent || '';
+
+  if (userAgent.includes('Mac')) {
+    return 'mac_app';
+  }
+
+  if (userAgent.includes('Windows')) {
+    return 'win_app';
+  }
+
+  return 'desktop_app';
 }
 
 function randomBase36(length: number): string {
