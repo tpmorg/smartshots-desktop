@@ -12,7 +12,7 @@ use std::{
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{menu::{Menu, MenuItem, Submenu}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, State};
+use tauri::{menu::{Menu, MenuItem, Submenu}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, PhysicalSize, Size, State};
 use tauri_plugin_opener::OpenerExt;
 use url::form_urlencoded;
 
@@ -392,6 +392,16 @@ fn main() {
                 }
             });
             if let Some(window) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let monitor_size = monitor.size();
+                    let min_width = ((monitor_size.width as f64) * 0.4).round() as u32;
+                    let min_height = ((monitor_size.height as f64) * 0.4).round() as u32;
+                    let _ = window.set_min_size(Some(Size::Physical(PhysicalSize::new(
+                        min_width.max(900),
+                        min_height.max(700),
+                    ))));
+                }
+
                 let window_for_close = window.clone();
                 let hide_to_tray_state = app.state::<SharedState>().hide_to_tray_on_close.clone();
                 window.on_window_event(move |event| {

@@ -32,7 +32,10 @@ type OAuthCallbackPayload = {
   url: string;
 };
 
+type AppView = 'dashboard' | 'settings';
+
 type AppState = {
+  activeView: AppView;
   isAuthenticated: boolean;
   authMessage: string;
   watcherRunning: boolean;
@@ -65,6 +68,10 @@ const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progr
 const dirsList = document.querySelector<HTMLUListElement>('#dirs-list')!;
 const backlogList = document.querySelector<HTMLUListElement>('#backlog-list')!;
 const backlogEmpty = document.querySelector<HTMLDivElement>('#backlog-empty')!;
+const viewDashboard = document.querySelector<HTMLElement>('#view-dashboard')!;
+const viewSettings = document.querySelector<HTMLElement>('#view-settings')!;
+const navDashboardBtn = document.querySelector<HTMLButtonElement>('#nav-dashboard-btn')!;
+const navSettingsBtn = document.querySelector<HTMLButtonElement>('#nav-settings-btn')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
 const watcherBtn = document.querySelector<HTMLButtonElement>('#watcher-btn')!;
@@ -88,6 +95,7 @@ let uploadSequence = 0;
 let uploadProgressTimer: number | null = null;
 let backlogRenderToken = 0;
 const store = createStore<AppState>({
+  activeView: 'dashboard',
   isAuthenticated: false,
   authMessage: 'checking...',
   watcherRunning: false,
@@ -197,6 +205,14 @@ watcherBtn.addEventListener('click', async () => {
   } else {
     await startWatcher();
   }
+});
+
+navDashboardBtn.addEventListener('click', () => {
+  store.setState({ activeView: 'dashboard' });
+});
+
+navSettingsBtn.addEventListener('click', () => {
+  store.setState({ activeView: 'settings' });
 });
 
 notificationsToggle.addEventListener('change', async () => {
@@ -371,6 +387,7 @@ function render(state: AppState): void {
   const watcherText = escapeHtml(state.watcherMessage);
   const uploadText = escapeHtml(state.uploadMessage);
   const isAuthed = state.isAuthenticated;
+  const onDashboard = state.activeView === 'dashboard';
 
   authStatus.innerHTML = `<strong>Auth:</strong> ${authText}`;
   watcherStatus.innerHTML = `<strong>Watcher:</strong> ${watcherText}`;
@@ -381,6 +398,10 @@ function render(state: AppState): void {
   backlogSummary.textContent = state.backlogCount === 0 ? 'No backlog' : `${state.backlogCount} pending`;
   authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
   authChip.classList.toggle('auth-chip--ok', isAuthed);
+  viewDashboard.hidden = !onDashboard;
+  viewSettings.hidden = onDashboard;
+  navDashboardBtn.classList.toggle('nav-item--active', onDashboard);
+  navSettingsBtn.classList.toggle('nav-item--active', !onDashboard);
 
   uploadProgress.hidden = !state.uploadInProgress && state.uploadProgress <= 0;
   uploadProgressLabel.textContent = state.uploadInProgress

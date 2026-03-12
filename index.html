@@ -17,7 +17,8 @@
         </div>
 
         <nav class="nav">
-          <button class="nav-item nav-item--active" type="button">Dashboard</button>
+          <button id="nav-dashboard-btn" class="nav-item nav-item--active" type="button">Dashboard</button>
+          <button id="nav-settings-btn" class="nav-item" type="button">Settings</button>
         </nav>
 
         <section class="sidebar-section">
@@ -29,31 +30,6 @@
           </div>
         </section>
 
-        <section class="sidebar-section">
-          <p class="sidebar-heading">Preferences</p>
-          <div class="toggle-list">
-            <label>
-              <input id="notifications-toggle" type="checkbox" />
-              Enable notifications
-            </label>
-            <label>
-              <input id="watcher-autostart-toggle" type="checkbox" />
-              Auto-start watcher
-            </label>
-            <label>
-              <input id="hide-to-tray-toggle" type="checkbox" />
-              Hide to tray on close
-            </label>
-            <label>
-              <input id="auto-sync-toggle" type="checkbox" />
-              Auto-sync new screenshots
-            </label>
-            <label>
-              <input id="review-backlog-toggle" type="checkbox" />
-              Review backlog on launch
-            </label>
-          </div>
-        </section>
       </aside>
 
       <main class="main-panel">
@@ -62,58 +38,123 @@
           <div class="auth-chip" id="auth-chip">Signed out</div>
         </header>
 
-        <section class="cards-grid">
-          <article class="card">
-            <p class="card-title">Authentication</p>
-            <p class="card-value" id="auth-summary">Checking...</p>
-          </article>
-          <article class="card">
-            <p class="card-title">Watcher</p>
-            <p class="card-value" id="watcher-summary">Stopped</p>
-          </article>
-          <article class="card">
-            <p class="card-title">Latest Upload</p>
-            <p class="card-value" id="upload-summary">Idle</p>
-          </article>
-          <article class="card">
-            <p class="card-title">Unprocessed</p>
-            <p class="card-value" id="backlog-summary">Scanning...</p>
-          </article>
-        </section>
+        <section id="view-dashboard" class="view">
+          <section class="cards-grid">
+            <article class="card">
+              <p class="card-title">Authentication</p>
+              <p class="card-value" id="auth-summary">Checking...</p>
+            </article>
+            <article class="card">
+              <p class="card-title">Watcher</p>
+              <p class="card-value" id="watcher-summary">Stopped</p>
+            </article>
+            <article class="card">
+              <p class="card-title">Latest Upload</p>
+              <p class="card-value" id="upload-summary">Idle</p>
+            </article>
+            <article class="card">
+              <p class="card-title">Unprocessed</p>
+              <p class="card-value" id="backlog-summary">Scanning...</p>
+            </article>
+          </section>
 
-        <section class="queue-section">
-          <div class="section-row">
-            <p class="section-title">Default Screenshot Directories</p>
-            <button id="watcher-btn" class="secondary">Start watcher</button>
-          </div>
-          <ul id="dirs-list" class="dirs-list"></ul>
-        </section>
-
-        <section class="queue-section">
-          <div class="section-row">
-            <p class="section-title">Backlog Review</p>
-            <div class="mini-actions">
-              <button id="backlog-select-all-btn" class="secondary">Select all</button>
-              <button id="backlog-clear-btn" class="secondary">Clear</button>
-              <button id="backlog-upload-btn">Upload selected</button>
+          <section class="queue-section">
+            <div class="section-row">
+              <p class="section-title">Default Screenshot Directories</p>
+              <button id="watcher-btn" class="secondary">Start watcher</button>
             </div>
-          </div>
-          <div id="backlog-empty" class="empty-text">No pending screenshots.</div>
-          <ul id="backlog-list" class="backlog-list"></ul>
+            <ul id="dirs-list" class="dirs-list"></ul>
+          </section>
+
+          <section class="queue-section">
+            <div class="section-row">
+              <p class="section-title">Backlog Review</p>
+              <div class="mini-actions">
+                <button id="backlog-select-all-btn" class="secondary">Select all</button>
+                <button id="backlog-clear-btn" class="secondary">Clear</button>
+                <button id="backlog-upload-btn">Upload selected</button>
+              </div>
+            </div>
+            <div id="backlog-empty" class="empty-text">No pending screenshots.</div>
+            <ul id="backlog-list" class="backlog-list"></ul>
+          </section>
+
+          <section class="action-row">
+            <button id="signin-btn">Sign in with Google</button>
+            <button id="signout-btn" class="secondary">Sign out</button>
+            <button id="website-btn" class="secondary">Go to Website</button>
+            <button id="quit-btn" class="danger">Quit App</button>
+          </section>
+
+          <section class="upload-progress" id="upload-progress" hidden>
+            <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
+            <div class="upload-progress__track">
+              <div class="upload-progress__fill" id="upload-progress-fill"></div>
+            </div>
+          </section>
         </section>
 
-        <section class="action-row">
-          <button id="signin-btn">Sign in with Google</button>
-          <button id="signout-btn" class="secondary">Sign out</button>
-          <button id="website-btn" class="secondary">Go to Website</button>
-          <button id="quit-btn" class="danger">Quit App</button>
-        </section>
+        <section id="view-settings" class="view" hidden>
+          <section class="settings-panel">
+            <p class="section-title">Preferences</p>
+            <div class="settings-list">
+              <label class="setting-row">
+                <div>
+                  <p class="setting-title">Enable notifications</p>
+                  <p class="setting-desc">Show desktop alerts for upload results.</p>
+                </div>
+                <span class="toggle-switch">
+                  <input id="notifications-toggle" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </span>
+              </label>
 
-        <section class="upload-progress" id="upload-progress" hidden>
-          <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
-          <div class="upload-progress__track">
-            <div class="upload-progress__fill" id="upload-progress-fill"></div>
-          </div>
+              <label class="setting-row">
+                <div>
+                  <p class="setting-title">Auto-start watcher</p>
+                  <p class="setting-desc">Start screenshot monitoring after launch/sign-in.</p>
+                </div>
+                <span class="toggle-switch">
+                  <input id="watcher-autostart-toggle" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </span>
+              </label>
+
+              <label class="setting-row">
+                <div>
+                  <p class="setting-title">Hide to tray on close</p>
+                  <p class="setting-desc">Keep Smartshots running in background when window closes.</p>
+                </div>
+                <span class="toggle-switch">
+                  <input id="hide-to-tray-toggle" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </span>
+              </label>
+
+              <label class="setting-row">
+                <div>
+                  <p class="setting-title">Auto-sync new screenshots</p>
+                  <p class="setting-desc">Upload new screenshots immediately when detected.</p>
+                </div>
+                <span class="toggle-switch">
+                  <input id="auto-sync-toggle" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </span>
+              </label>
+
+              <label class="setting-row">
+                <div>
+                  <p class="setting-title">Review backlog on launch</p>
+                  <p class="setting-desc">Scan recent screenshots and queue them for manual review.</p>
+                </div>
+                <span class="toggle-switch">
+                  <input id="review-backlog-toggle" type="checkbox" />
+                  <span class="toggle-slider"></span>
+                </span>
+              </label>
+            </div>
+          </section>
+          <div class="settings-note">Tip: Use Dashboard to review and upload queued screenshots.</div>
         </section>
       </main>
     </div>
