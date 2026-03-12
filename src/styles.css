@@ -96,6 +96,10 @@ body {
   gap: 8px;
 }
 
+.sidebar-status {
+  margin-top: 4px;
+}
+
 .nav-item {
   width: 100%;
   text-align: left;
@@ -174,7 +178,7 @@ body {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -413,30 +417,170 @@ button:disabled {
 }
 
 .upload-progress {
-  padding-top: 4px;
+  padding: 10px 12px 12px;
+  border: 1px solid #2f5f4f;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(15, 44, 32, 0.72), rgba(9, 26, 21, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(122, 255, 196, 0.12), 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .upload-progress__label {
   font-size: 12px;
-  color: #d2def5;
-  margin-bottom: 6px;
+  color: #d9ffef;
+  margin-bottom: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.upload-progress__label::after {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(122, 255, 196, 0.3);
+  border-top-color: #7affc4;
+  opacity: 0.2;
+  transform: scale(0.95);
 }
 
 .upload-progress__track {
   width: 100%;
-  height: 8px;
+  height: 14px;
   border-radius: 999px;
-  background: #0a1630;
-  border: 1px solid #27406a;
+  background: linear-gradient(180deg, #0b221a, #0a1a16);
+  border: 1px solid #3b755d;
   overflow: hidden;
+  position: relative;
 }
 
 .upload-progress__fill {
   width: 0;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #5da2ff 0%, #3d78de 100%);
+  background: linear-gradient(90deg, #52e39d 0%, #39cb85 45%, #22a869 100%);
   transition: width 150ms ease;
+  position: relative;
+  box-shadow: 0 0 14px rgba(82, 227, 157, 0.6);
+}
+
+.upload-progress__fill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.24) 0,
+    rgba(255, 255, 255, 0.24) 10px,
+    rgba(255, 255, 255, 0.06) 10px,
+    rgba(255, 255, 255, 0.06) 20px
+  );
+  opacity: 0.7;
+}
+
+.upload-progress--active .upload-progress__label::after {
+  opacity: 1;
+  animation: upload-spinner 850ms linear infinite;
+}
+
+.upload-progress--active .upload-progress__fill::before {
+  animation: upload-stripes 900ms linear infinite;
+}
+
+.upload-progress--active .upload-progress__track {
+  box-shadow: 0 0 0 1px rgba(122, 255, 196, 0.25), 0 0 18px rgba(41, 178, 110, 0.2);
+}
+
+.upload-progress--complete {
+  animation: upload-complete-shell 700ms ease-out 1;
+}
+
+.upload-progress--complete .upload-progress__track {
+  animation: upload-complete-track 760ms ease-out 1;
+}
+
+.upload-progress--complete .upload-progress__fill {
+  animation: upload-complete-fill 760ms ease-out 1;
+}
+
+.upload-progress--complete .upload-progress__label::after {
+  opacity: 1;
+  border-color: rgba(153, 255, 214, 0.8);
+  border-top-color: #c8ffe7;
+  animation: upload-complete-ring 760ms ease-out 1;
+}
+
+@keyframes upload-stripes {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(28px);
+  }
+}
+
+@keyframes upload-spinner {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes upload-complete-shell {
+  0% {
+    box-shadow: inset 0 0 0 1px rgba(122, 255, 196, 0.12), 0 10px 24px rgba(0, 0, 0, 0.28);
+  }
+  35% {
+    box-shadow: inset 0 0 0 1px rgba(164, 255, 221, 0.5), 0 0 30px rgba(92, 235, 161, 0.55);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(122, 255, 196, 0.12), 0 10px 24px rgba(0, 0, 0, 0.28);
+  }
+}
+
+@keyframes upload-complete-track {
+  0% {
+    box-shadow: 0 0 0 1px rgba(59, 117, 93, 0.2);
+  }
+  40% {
+    box-shadow: 0 0 0 1px rgba(168, 255, 223, 0.8), 0 0 24px rgba(88, 239, 161, 0.75);
+  }
+  100% {
+    box-shadow: 0 0 0 1px rgba(59, 117, 93, 0.2);
+  }
+}
+
+@keyframes upload-complete-fill {
+  0% {
+    filter: saturate(1) brightness(1);
+  }
+  35% {
+    filter: saturate(1.35) brightness(1.35);
+  }
+  100% {
+    filter: saturate(1) brightness(1);
+  }
+}
+
+@keyframes upload-complete-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(154, 255, 215, 0.55);
+  }
+  45% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 8px rgba(154, 255, 215, 0.16);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(154, 255, 215, 0);
+  }
 }
 
 .settings-panel {

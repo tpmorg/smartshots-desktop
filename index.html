@@ -20,6 +20,12 @@
           <button id="nav-dashboard-btn" class="nav-item nav-item--active" type="button">Dashboard</button>
           <button id="nav-settings-btn" class="nav-item" type="button">Settings</button>
         </nav>
+        <section class="sidebar-status">
+          <article class="card" id="watcher-card">
+            <p class="card-title">Monitoring</p>
+            <p class="card-value" id="watcher-summary">Stopped</p>
+          </article>
+        </section>
 
       </aside>
 
@@ -33,25 +39,6 @@
         </header>
 
         <section id="view-dashboard" class="view">
-          <section class="cards-grid">
-            <article class="card">
-              <p class="card-title">Authentication</p>
-              <p class="card-value" id="auth-summary">Checking...</p>
-            </article>
-            <article class="card" id="watcher-card">
-              <p class="card-title">Watcher</p>
-              <p class="card-value" id="watcher-summary">Stopped</p>
-            </article>
-            <article class="card">
-              <p class="card-title">Latest Upload</p>
-              <p class="card-value" id="upload-summary">Idle</p>
-            </article>
-            <article class="card">
-              <p class="card-title">Unprocessed</p>
-              <p class="card-value" id="backlog-summary">Scanning...</p>
-            </article>
-          </section>
-
           <section class="upload-progress" id="upload-progress" hidden>
             <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
             <div class="upload-progress__track">

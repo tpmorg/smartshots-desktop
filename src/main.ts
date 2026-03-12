@@ -60,10 +60,7 @@ type AppState = {
 
 const authChip = document.querySelector<HTMLDivElement>('#auth-chip')!;
 const signedInAs = document.querySelector<HTMLSpanElement>('#signed-in-as')!;
-const authSummary = document.querySelector<HTMLParagraphElement>('#auth-summary')!;
 const watcherSummary = document.querySelector<HTMLParagraphElement>('#watcher-summary')!;
-const uploadSummary = document.querySelector<HTMLParagraphElement>('#upload-summary')!;
-const backlogSummary = document.querySelector<HTMLParagraphElement>('#backlog-summary')!;
 const uploadProgress = document.querySelector<HTMLDivElement>('#upload-progress')!;
 const uploadProgressLabel = document.querySelector<HTMLDivElement>('#upload-progress-label')!;
 const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progress-fill')!;
@@ -513,21 +510,23 @@ function render(state: AppState): void {
   const isAuthed = state.isAuthenticated;
   const onDashboard = state.activeView === 'dashboard';
 
-  authSummary.textContent = isAuthed ? 'Connected' : 'Signed out';
   signedInAs.textContent = state.signedInUserLabel ? `Signed in as ${state.signedInUserLabel}` : '';
   signedInAs.hidden = !isAuthed || !state.signedInUserLabel;
   watcherCard.classList.toggle('card--active', state.watcherRunning);
   watcherSummary.innerHTML = state.watcherRunning
     ? '<span class="watcher-pulse"></span>Active'
     : 'Stopped';
-  uploadSummary.textContent = state.uploadInProgress ? 'Uploading...' : state.uploadMessage;
-  backlogSummary.textContent = state.backlogCount === 0 ? 'No backlog' : `${state.backlogCount} pending`;
   authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
   authChip.classList.toggle('auth-chip--ok', isAuthed);
   viewDashboard.hidden = !onDashboard;
   viewSettings.hidden = onDashboard;
   navDashboardBtn.classList.toggle('nav-item--active', onDashboard);
   navSettingsBtn.classList.toggle('nav-item--active', !onDashboard);
+  uploadProgress.classList.toggle('upload-progress--active', state.uploadInProgress);
+  uploadProgress.classList.toggle(
+    'upload-progress--complete',
+    !state.uploadInProgress && state.uploadProgress >= 100
+  );
 
   uploadProgress.hidden = !state.uploadInProgress && state.uploadProgress <= 0;
   uploadProgressLabel.textContent = state.uploadInProgress
