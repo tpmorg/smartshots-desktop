@@ -159,6 +159,18 @@
             <button id="quit-btn" class="danger">Quit App</button>
           </div>
         </section>
+
+        <div id="ignore-confirm-overlay" class="confirm-overlay" hidden>
+          <div class="confirm-modal">
+            <p class="confirm-modal__title">Ignore Screenshot</p>
+            <p class="confirm-modal__text" id="ignore-confirm-text">Ignore this screenshot?</p>
+            <p class="confirm-modal__filename" id="ignore-confirm-filename"></p>
+            <div class="confirm-modal__actions">
+              <button id="ignore-confirm-cancel" class="secondary" type="button">Cancel</button>
+              <button id="ignore-confirm-ignore" type="button">Ignore</button>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
 

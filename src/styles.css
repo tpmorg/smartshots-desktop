@@ -481,6 +481,52 @@ button:disabled {
   gap: 10px;
 }
 
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 12, 30, 0.7);
+  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.confirm-modal {
+  width: min(460px, calc(100% - 36px));
+  border: 1px solid #49658e;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #132949, #0f2038);
+  padding: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-modal__title {
+  margin: 0 0 6px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.confirm-modal__text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.confirm-modal__filename {
+  margin: 8px 0 0;
+  color: #dce7ff;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.confirm-modal__actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .toggle-switch {
   position: relative;
   width: 46px;

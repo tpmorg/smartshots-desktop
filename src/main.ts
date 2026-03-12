@@ -90,6 +90,11 @@ const backlogClearBtn = document.querySelector<HTMLButtonElement>('#backlog-clea
 const backlogUploadBtn = document.querySelector<HTMLButtonElement>('#backlog-upload-btn')!;
 const websiteBtn = document.querySelector<HTMLButtonElement>('#website-btn')!;
 const quitBtn = document.querySelector<HTMLButtonElement>('#quit-btn')!;
+const ignoreConfirmOverlay = document.querySelector<HTMLDivElement>('#ignore-confirm-overlay')!;
+const ignoreConfirmFileName = document.querySelector<HTMLSpanElement>('#ignore-confirm-filename')!;
+const ignoreConfirmText = document.querySelector<HTMLParagraphElement>('#ignore-confirm-text')!;
+const ignoreConfirmCancelBtn = document.querySelector<HTMLButtonElement>('#ignore-confirm-cancel')!;
+const ignoreConfirmIgnoreBtn = document.querySelector<HTMLButtonElement>('#ignore-confirm-ignore')!;
 
 assertEnv();
 
@@ -100,6 +105,7 @@ const thumbnailUrlCache = new Map<string, string>();
 let uploadSequence = 0;
 let uploadProgressTimer: number | null = null;
 let backlogRenderToken = 0;
+let pendingIgnorePath: string | null = null;
 const store = createStore<AppState>({
   activeView: 'dashboard',
   isAuthenticated: false,
@@ -335,34 +341,52 @@ backlogList.addEventListener('change', (event) => {
 
 backlogList.addEventListener('click', async (event) => {
   const target = event.target;
-  if (!(target instanceof HTMLButtonElement)) {
+  const button = target instanceof HTMLElement
+    ? target.closest('button[data-action="ignore"]') as HTMLButtonElement | null
+    : null;
+  if (!button) {
     return;
   }
 
-  const action = target.dataset.action;
-  if (action !== 'ignore') {
+  event.preventDefault();
+  const path = button.dataset.path;
+  if (!path) {
+    store.setState({ uploadMessage: 'ignore failed (missing item path)' });
     return;
   }
 
-  const path = target.dataset.path;
+  await handleIgnoreBacklogItem(path);
+});
+
+ignoreConfirmCancelBtn.addEventListener('click', () => {
+  const pending = pendingIgnorePath;
+  hideIgnoreConfirm();
+});
+
+ignoreConfirmIgnoreBtn.addEventListener('click', async () => {
+  const path = pendingIgnorePath;
   if (!path) {
     return;
   }
 
-  const fileName = await basename(path);
-  const confirmed = window.confirm(`Ignore ${fileName}?`);
-  if (confirmed !== true) {
-    return;
-  }
+  await confirmIgnoreFromModal(path);
+});
 
-  try {
-    await markIgnored(path);
-    removeBacklogPaths([path]);
-    store.setState({ uploadMessage: `ignored ${fileName}` });
-  } catch (error) {
-    store.setState({ uploadMessage: `ignore failed (${String(error)})` });
+ignoreConfirmOverlay.addEventListener('click', (event) => {
+  if (event.target === ignoreConfirmOverlay) {
+    ignoreConfirmCancelBtn.click();
   }
 });
+
+async function handleIgnoreBacklogItem(path: string): Promise<void> {
+  try {
+    const fileName = await basename(path).catch(() => path.split(/[\\/]/).pop() ?? path);
+    showIgnoreConfirm(fileName, path);
+  } catch (error) {
+    console.error('[smartshots] failed to ignore', { path, error });
+    store.setState({ uploadMessage: `ignore failed (${String(error)})` });
+  }
+}
 
 websiteBtn.addEventListener('click', async () => {
   await invoke('open_website');
@@ -422,6 +446,35 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
 
   if (store.getState().watcherAutostart && !store.getState().watcherRunning) {
     await startWatcher();
+  }
+}
+
+function showIgnoreConfirm(fileName: string, path: string): void {
+  pendingIgnorePath = path;
+  ignoreConfirmFileName.textContent = fileName;
+  ignoreConfirmText.textContent = `Ignore ${fileName}?`;
+  ignoreConfirmOverlay.hidden = false;
+}
+
+function hideIgnoreConfirm(): void {
+  ignoreConfirmOverlay.hidden = true;
+  pendingIgnorePath = null;
+  ignoreConfirmFileName.textContent = '';
+  ignoreConfirmText.textContent = '';
+}
+
+async function confirmIgnoreFromModal(path: string): Promise<void> {
+  const fileName = ignoreConfirmFileName.textContent || path.split(/[\\/]/).pop() || path;
+
+  hideIgnoreConfirm();
+
+  try {
+    await markIgnored(path);
+    removeBacklogPaths([path]);
+    store.setState({ uploadMessage: `ignored ${fileName}` });
+  } catch (error) {
+    console.error('[smartshots] failed to ignore', { path, error });
+    store.setState({ uploadMessage: `ignore failed (${String(error)})` });
   }
 }
 
