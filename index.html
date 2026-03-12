@@ -44,16 +44,21 @@
               <input id="hide-to-tray-toggle" type="checkbox" />
               Hide to tray on close
             </label>
+            <label>
+              <input id="auto-sync-toggle" type="checkbox" />
+              Auto-sync new screenshots
+            </label>
+            <label>
+              <input id="review-backlog-toggle" type="checkbox" />
+              Review backlog on launch
+            </label>
           </div>
         </section>
       </aside>
 
       <main class="main-panel">
         <header class="main-header">
-          <div>
-            <h1 class="heading">Syncing Screenshots to AI Backend</h1>
-            <p class="subheading">Automatic screenshot sync with Smartshots processing.</p>
-          </div>
+          <div></div>
           <div class="auth-chip" id="auth-chip">Signed out</div>
         </header>
 
@@ -70,6 +75,10 @@
             <p class="card-title">Latest Upload</p>
             <p class="card-value" id="upload-summary">Idle</p>
           </article>
+          <article class="card">
+            <p class="card-title">Unprocessed</p>
+            <p class="card-value" id="backlog-summary">Scanning...</p>
+          </article>
         </section>
 
         <section class="queue-section">
@@ -78,6 +87,19 @@
             <button id="watcher-btn" class="secondary">Start watcher</button>
           </div>
           <ul id="dirs-list" class="dirs-list"></ul>
+        </section>
+
+        <section class="queue-section">
+          <div class="section-row">
+            <p class="section-title">Backlog Review</p>
+            <div class="mini-actions">
+              <button id="backlog-select-all-btn" class="secondary">Select all</button>
+              <button id="backlog-clear-btn" class="secondary">Clear</button>
+              <button id="backlog-upload-btn">Upload selected</button>
+            </div>
+          </div>
+          <div id="backlog-empty" class="empty-text">No pending screenshots.</div>
+          <ul id="backlog-list" class="backlog-list"></ul>
         </section>
 
         <section class="action-row">

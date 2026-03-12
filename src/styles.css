@@ -202,7 +202,7 @@ label {
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -244,6 +244,12 @@ label {
   gap: 10px;
 }
 
+.mini-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .section-title {
   margin: 0;
   color: var(--muted);
@@ -263,6 +269,66 @@ label {
   color: #dce7ff;
   font-size: 14px;
   word-break: break-word;
+}
+
+.empty-text {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.backlog-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.backlog-item {
+  border: 1px solid #3f618f;
+  border-radius: 12px;
+  padding: 8px;
+  background: #142948cc;
+  display: grid;
+  grid-template-columns: 144px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.backlog-thumb {
+  width: 144px;
+  height: 100px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #4d6f9f;
+  background: #0c1932;
+}
+
+.backlog-meta {
+  min-width: 0;
+}
+
+.backlog-path {
+  margin: 0;
+  font-size: 12px;
+  color: #dce7ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.backlog-name {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.backlog-item input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
 }
 
 .action-row {
@@ -341,10 +407,16 @@ button:disabled {
   }
 
   .cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .heading {
     font-size: 28px;
+  }
+}
+
+@media (max-width: 680px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
   }
 }

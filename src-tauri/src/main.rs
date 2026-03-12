@@ -1,12 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
+    fs,
     io::{BufRead, BufReader, Write},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -44,6 +45,51 @@ fn get_default_screenshot_dirs() -> Vec<String> {
         .into_iter()
         .map(|p| p.to_string_lossy().to_string())
         .collect()
+}
+
+#[tauri::command]
+fn list_recent_screenshots(max_items: Option<usize>, lookback_hours: Option<u64>) -> Result<Vec<String>, String> {
+    let limit = max_items.unwrap_or(250).clamp(1, 2000);
+    let lookback = lookback_hours.unwrap_or(168).clamp(1, 24 * 90);
+    let cutoff = SystemTime::now()
+        .checked_sub(Duration::from_secs(lookback * 60 * 60))
+        .ok_or_else(|| "invalid lookback value".to_string())?;
+
+    let mut candidates: Vec<(SystemTime, PathBuf)> = Vec::new();
+    for dir in default_screenshot_dirs() {
+        if !dir.exists() {
+            continue;
+        }
+
+        let entries = fs::read_dir(&dir).map_err(|e| format!("read_dir failed for {}: {}", dir.display(), e))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() || !is_image_file(&path) {
+                continue;
+            }
+
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+
+            let modified = metadata
+                .modified()
+                .or_else(|_| metadata.created())
+                .unwrap_or(SystemTime::UNIX_EPOCH);
+
+            if modified >= cutoff {
+                candidates.push((modified, path));
+            }
+        }
+    }
+
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+
+    Ok(candidates
+        .into_iter()
+        .take(limit)
+        .map(|(_, path)| path.to_string_lossy().to_string())
+        .collect())
 }
 
 #[tauri::command]
@@ -362,6 +408,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_default_screenshot_dirs,
+            list_recent_screenshots,
             start_screenshot_watcher,
             stop_screenshot_watcher,
             get_oauth_redirect_url,
