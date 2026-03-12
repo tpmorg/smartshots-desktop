@@ -2,7 +2,7 @@ import { load } from '@tauri-apps/plugin-store';
 
 type UploadRecord = {
   filePath: string;
-  status: 'uploaded' | 'failed';
+  status: 'uploaded' | 'failed' | 'ignored';
   uploadedAt?: number;
   lastAttemptAt: number;
   attempts: number;
@@ -72,6 +72,12 @@ export async function hasUploaded(filePath: string): Promise<boolean> {
   return record?.status === 'uploaded';
 }
 
+export async function hasIgnored(filePath: string): Promise<boolean> {
+  const cache = await getCache();
+  const record = cache.data.byPath[normalizePath(filePath)];
+  return record?.status === 'ignored';
+}
+
 export async function markUploadSuccess(filePath: string): Promise<void> {
   const cache = await getCache();
   const key = normalizePath(filePath);
@@ -109,13 +115,31 @@ export async function markUploadFailure(filePath: string, error: string): Promis
   await persist(cache);
 }
 
+export async function markIgnored(filePath: string): Promise<void> {
+  const cache = await getCache();
+  const key = normalizePath(filePath);
+  const prev = cache.data.byPath[key];
+  const now = Date.now();
+
+  cache.data.byPath[key] = {
+    filePath,
+    status: 'ignored',
+    uploadedAt: prev?.uploadedAt,
+    lastAttemptAt: now,
+    attempts: (prev?.attempts ?? 0) + 1
+  };
+
+  await pruneUploadHistoryInternal(cache);
+  await persist(cache);
+}
+
 export async function getUnprocessedPaths(paths: string[]): Promise<string[]> {
   const cache = await getCache();
 
   const out: string[] = [];
   for (const path of paths) {
     const record = cache.data.byPath[normalizePath(path)];
-    if (record?.status === 'uploaded') {
+    if (record?.status === 'uploaded' || record?.status === 'ignored') {
       continue;
     }
     out.push(path);

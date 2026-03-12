@@ -9,7 +9,7 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <img src="/src/assets/smartshots-logo.svg" alt="Smartshots logo" class="brand-logo" />
+          <img src="/src/assets/smartshots-logo.png" alt="Smartshots logo" class="brand-logo" />
           <div>
             <p class="brand-name">Smartshots</p>
             <p class="brand-subtitle">Desktop Sync</p>
@@ -21,21 +21,15 @@
           <button id="nav-settings-btn" class="nav-item" type="button">Settings</button>
         </nav>
 
-        <section class="sidebar-section">
-          <p class="sidebar-heading">Status</p>
-          <div class="status-list">
-            <p class="status" id="auth-status">Auth: checking...</p>
-            <p class="status" id="watcher-status">Watcher: stopped</p>
-            <p class="status" id="upload-status">Uploads: idle</p>
-          </div>
-        </section>
-
       </aside>
 
       <main class="main-panel">
         <header class="main-header">
           <div></div>
-          <div class="auth-chip" id="auth-chip">Signed out</div>
+          <div class="header-auth">
+            <div class="auth-chip" id="auth-chip">Signed out</div>
+            <span class="signed-in-meta" id="signed-in-as" hidden>Signed in as</span>
+          </div>
         </header>
 
         <section id="view-dashboard" class="view">
@@ -44,7 +38,7 @@
               <p class="card-title">Authentication</p>
               <p class="card-value" id="auth-summary">Checking...</p>
             </article>
-            <article class="card">
+            <article class="card" id="watcher-card">
               <p class="card-title">Watcher</p>
               <p class="card-value" id="watcher-summary">Stopped</p>
             </article>
@@ -79,11 +73,17 @@
             <ul id="backlog-list" class="backlog-list"></ul>
           </section>
 
+          <section class="queue-section">
+            <div class="section-row">
+              <p class="section-title">Recent Uploads</p>
+            </div>
+            <div id="recent-uploads-empty" class="empty-text">No uploads yet this session.</div>
+            <ul id="recent-uploads-list" class="recent-uploads-list" hidden></ul>
+          </section>
+
           <section class="action-row">
             <button id="signin-btn">Sign in with Google</button>
             <button id="signout-btn" class="secondary">Sign out</button>
-            <button id="website-btn" class="secondary">Go to Website</button>
-            <button id="quit-btn" class="danger">Quit App</button>
           </section>
 
           <section class="upload-progress" id="upload-progress" hidden>
@@ -154,7 +154,10 @@
               </label>
             </div>
           </section>
-          <div class="settings-note">Tip: Use Dashboard to review and upload queued screenshots.</div>
+          <div class="settings-actions">
+            <button id="website-btn" class="secondary">Go to Website</button>
+            <button id="quit-btn" class="danger">Quit App</button>
+          </div>
         </section>
       </main>
     </div>

@@ -18,8 +18,10 @@ import {
 import {
   getUnprocessedPaths,
   hasUploaded,
+  hasIgnored,
   markUploadFailure,
   markUploadSuccess,
+  markIgnored,
   pruneUploadHistory
 } from './uploadHistory';
 import './styles.css';
@@ -38,6 +40,7 @@ type AppState = {
   activeView: AppView;
   isAuthenticated: boolean;
   authMessage: string;
+  signedInUserLabel: string;
   watcherRunning: boolean;
   watcherMessage: string;
   uploadMessage: string;
@@ -52,12 +55,11 @@ type AppState = {
   backlogCount: number;
   backlogPaths: string[];
   backlogSelected: string[];
+  recentUploadLog: Array<{ name: string; path: string; ts: number }>;
 };
 
-const authStatus = document.querySelector<HTMLParagraphElement>('#auth-status')!;
-const watcherStatus = document.querySelector<HTMLParagraphElement>('#watcher-status')!;
-const uploadStatus = document.querySelector<HTMLParagraphElement>('#upload-status')!;
 const authChip = document.querySelector<HTMLDivElement>('#auth-chip')!;
+const signedInAs = document.querySelector<HTMLSpanElement>('#signed-in-as')!;
 const authSummary = document.querySelector<HTMLParagraphElement>('#auth-summary')!;
 const watcherSummary = document.querySelector<HTMLParagraphElement>('#watcher-summary')!;
 const uploadSummary = document.querySelector<HTMLParagraphElement>('#upload-summary')!;
@@ -68,6 +70,9 @@ const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progr
 const dirsList = document.querySelector<HTMLUListElement>('#dirs-list')!;
 const backlogList = document.querySelector<HTMLUListElement>('#backlog-list')!;
 const backlogEmpty = document.querySelector<HTMLDivElement>('#backlog-empty')!;
+const watcherCard = document.querySelector<HTMLElement>('#watcher-card')!;
+const recentUploadsList = document.querySelector<HTMLUListElement>('#recent-uploads-list')!;
+const recentUploadsEmpty = document.querySelector<HTMLDivElement>('#recent-uploads-empty')!;
 const viewDashboard = document.querySelector<HTMLElement>('#view-dashboard')!;
 const viewSettings = document.querySelector<HTMLElement>('#view-settings')!;
 const navDashboardBtn = document.querySelector<HTMLButtonElement>('#nav-dashboard-btn')!;
@@ -87,6 +92,7 @@ const websiteBtn = document.querySelector<HTMLButtonElement>('#website-btn')!;
 const quitBtn = document.querySelector<HTMLButtonElement>('#quit-btn')!;
 
 assertEnv();
+
 const supabase = new SupabaseService();
 const recentUploads = new Map<string, number>();
 const inFlightUploads = new Set<string>();
@@ -98,6 +104,7 @@ const store = createStore<AppState>({
   activeView: 'dashboard',
   isAuthenticated: false,
   authMessage: 'checking...',
+  signedInUserLabel: '',
   watcherRunning: false,
   watcherMessage: 'stopped',
   uploadMessage: 'idle',
@@ -111,7 +118,8 @@ const store = createStore<AppState>({
   screenshotDirs: [],
   backlogCount: 0,
   backlogPaths: [],
-  backlogSelected: []
+  backlogSelected: [],
+  recentUploadLog: []
 });
 
 let lastDirsKey = '';
@@ -138,9 +146,11 @@ async function init(): Promise<void> {
   }
 
   const authed = await supabase.isAuthenticated();
+  const signedInUserLabel = authed ? await getSignedInUserLabel() : '';
   store.setState({
     isAuthenticated: authed,
-    authMessage: authed ? 'signed in' : 'signed out'
+    authMessage: authed ? 'signed in' : 'signed out',
+    signedInUserLabel
   });
 
   if (authed && preferences.watcherAutostart) {
@@ -148,9 +158,21 @@ async function init(): Promise<void> {
   }
 
   supabase.onAuthenticationStateChanged((isAuthenticated) => {
-    store.setState({
-      isAuthenticated,
-      authMessage: isAuthenticated ? 'signed in' : 'signed out'
+    if (!isAuthenticated) {
+      store.setState({
+        isAuthenticated: false,
+        authMessage: 'signed out',
+        signedInUserLabel: ''
+      });
+      return;
+    }
+
+    void refreshSignedInUserIdentity().then((signedInUserLabel) => {
+      store.setState({
+        isAuthenticated: true,
+        authMessage: 'signed in',
+        signedInUserLabel
+      });
     });
 
     if (isAuthenticated && store.getState().watcherAutostart && !store.getState().watcherRunning) {
@@ -192,7 +214,8 @@ signoutBtn.addEventListener('click', async () => {
     await supabase.signOut();
     store.setState({
       isAuthenticated: false,
-      authMessage: 'signed out'
+      authMessage: 'signed out',
+      signedInUserLabel: ''
     });
   } catch (error) {
     store.setState({ authMessage: `sign-out failed (${String(error)})` });
@@ -310,6 +333,37 @@ backlogList.addEventListener('change', (event) => {
   store.setState({ backlogSelected: [...selected] });
 });
 
+backlogList.addEventListener('click', async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const action = target.dataset.action;
+  if (action !== 'ignore') {
+    return;
+  }
+
+  const path = target.dataset.path;
+  if (!path) {
+    return;
+  }
+
+  const fileName = await basename(path);
+  const confirmed = window.confirm(`Ignore ${fileName}?`);
+  if (confirmed !== true) {
+    return;
+  }
+
+  try {
+    await markIgnored(path);
+    removeBacklogPaths([path]);
+    store.setState({ uploadMessage: `ignored ${fileName}` });
+  } catch (error) {
+    store.setState({ uploadMessage: `ignore failed (${String(error)})` });
+  }
+});
+
 websiteBtn.addEventListener('click', async () => {
   await invoke('open_website');
 });
@@ -327,6 +381,11 @@ async function listenForScreenshots(): Promise<void> {
 
     if (await hasUploaded(filePath)) {
       store.setState({ uploadMessage: `skipped duplicate: ${filePath}` });
+      return;
+    }
+
+    if (await hasIgnored(filePath)) {
+      store.setState({ uploadMessage: `skipped ignored screenshot: ${filePath}` });
       return;
     }
 
@@ -354,14 +413,29 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
     return;
   }
 
+  const signedInUserLabel = await getSignedInUserLabel();
   store.setState({
     isAuthenticated: true,
-    authMessage: 'signed in'
+    authMessage: 'signed in',
+    signedInUserLabel
   });
 
   if (store.getState().watcherAutostart && !store.getState().watcherRunning) {
     await startWatcher();
   }
+}
+
+async function getSignedInUserLabel(): Promise<string> {
+  const userInfo = await supabase.getCurrentUserInfo();
+  if (!userInfo) {
+    return '';
+  }
+
+  return userInfo.name || userInfo.email || `User (${userInfo.id.slice(0, 8)})`;
+}
+
+async function refreshSignedInUserIdentity(): Promise<string> {
+  return getSignedInUserLabel();
 }
 
 async function startWatcher(): Promise<void> {
@@ -383,17 +457,16 @@ async function stopWatcher(): Promise<void> {
 }
 
 function render(state: AppState): void {
-  const authText = escapeHtml(state.authMessage);
-  const watcherText = escapeHtml(state.watcherMessage);
-  const uploadText = escapeHtml(state.uploadMessage);
   const isAuthed = state.isAuthenticated;
   const onDashboard = state.activeView === 'dashboard';
 
-  authStatus.innerHTML = `<strong>Auth:</strong> ${authText}`;
-  watcherStatus.innerHTML = `<strong>Watcher:</strong> ${watcherText}`;
-  uploadStatus.innerHTML = `<strong>Uploads:</strong> ${uploadText}`;
   authSummary.textContent = isAuthed ? 'Connected' : 'Signed out';
-  watcherSummary.textContent = state.watcherRunning ? 'Active' : 'Stopped';
+  signedInAs.textContent = state.signedInUserLabel ? `Signed in as ${state.signedInUserLabel}` : '';
+  signedInAs.hidden = !isAuthed || !state.signedInUserLabel;
+  watcherCard.classList.toggle('card--active', state.watcherRunning);
+  watcherSummary.innerHTML = state.watcherRunning
+    ? '<span class="watcher-pulse"></span>Active'
+    : 'Stopped';
   uploadSummary.textContent = state.uploadInProgress ? 'Uploading...' : state.uploadMessage;
   backlogSummary.textContent = state.backlogCount === 0 ? 'No backlog' : `${state.backlogCount} pending`;
   authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
@@ -435,6 +508,7 @@ function render(state: AppState): void {
 
   backlogEmpty.hidden = state.backlogPaths.length > 0;
   backlogUploadBtn.disabled = state.backlogSelected.length === 0 || !state.isAuthenticated;
+  renderRecentUploads(state.recentUploadLog);
   void renderBacklogList(state.backlogPaths, state.backlogSelected);
 }
 
@@ -466,14 +540,27 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
       meta.appendChild(nameEl);
       meta.appendChild(pathEl);
 
+      const actions = document.createElement('div');
+      actions.className = 'backlog-actions';
+
+      const ignoreBtn = document.createElement('button');
+      ignoreBtn.type = 'button';
+      ignoreBtn.className = 'secondary ignore-btn';
+      ignoreBtn.dataset.action = 'ignore';
+      ignoreBtn.dataset.path = path;
+      ignoreBtn.textContent = 'Ignore';
+
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.dataset.path = path;
       checkbox.checked = selectedSet.has(path);
 
+      actions.appendChild(ignoreBtn);
+      actions.appendChild(checkbox);
+
       li.appendChild(img);
       li.appendChild(meta);
-      li.appendChild(checkbox);
+      li.appendChild(actions);
       return li;
     })
   );
@@ -483,6 +570,31 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
   }
 
   backlogList.replaceChildren(...listElements);
+}
+
+function renderRecentUploads(log: Array<{ name: string; path: string; ts: number }>): void {
+  recentUploadsEmpty.hidden = log.length > 0;
+  recentUploadsList.hidden = log.length === 0;
+
+  recentUploadsList.replaceChildren(
+    ...[...log].reverse().map((entry) => {
+      const li = document.createElement('li');
+      li.className = 'recent-upload-item';
+
+      const name = document.createElement('span');
+      name.className = 'recent-upload-name';
+      name.textContent = entry.name;
+
+      const time = document.createElement('span');
+      time.className = 'recent-upload-time';
+      const mins = Math.round((Date.now() - entry.ts) / 60000);
+      time.textContent = mins < 1 ? 'just now' : `${mins}m ago`;
+
+      li.appendChild(name);
+      li.appendChild(time);
+      return li;
+    })
+  );
 }
 
 async function getThumbnailUrl(path: string): Promise<string> {
@@ -530,6 +642,12 @@ async function uploadOneScreenshot(filePath: string, source: 'watcher' | 'backlo
     completeUploadProgress(seq);
 
     removeBacklogPaths([filePath]);
+
+    const uploadedName = await basename(filePath);
+    store.setState((s) => ({
+      recentUploadLog: [...s.recentUploadLog.slice(-4), { name: uploadedName, path: filePath, ts: Date.now() }]
+    }));
+
     console.info('[smartshots] upload ok', {
       filePath,
       endpoint: result.endpoint,

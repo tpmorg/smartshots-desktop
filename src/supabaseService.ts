@@ -7,6 +7,11 @@ import imageCompression from 'browser-image-compression';
 import { config } from './env';
 
 export type AuthChangeHandler = (isAuthenticated: boolean) => void;
+export type SignedInUserInfo = {
+  id: string;
+  email: string | null;
+  name: string | null;
+};
 export type UploadResult = {
   endpoint: string;
   responseStatus: number;
@@ -41,6 +46,20 @@ export class SupabaseService {
   async isAuthenticated(): Promise<boolean> {
     const { data } = await this.supabase.auth.getSession();
     return Boolean(data.session?.access_token);
+  }
+
+  async getCurrentUserInfo(): Promise<SignedInUserInfo | null> {
+    const { data, error } = await this.supabase.auth.getUser();
+    if (error || !data.user) {
+      return null;
+    }
+
+    const name = data.user.user_metadata?.full_name || data.user.user_metadata?.name || null;
+    return {
+      id: data.user.id,
+      email: data.user.email ?? null,
+      name
+    };
   }
 
   async beginOAuthSignIn(): Promise<void> {
