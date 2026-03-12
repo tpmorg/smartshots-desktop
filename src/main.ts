@@ -33,6 +33,10 @@ type AppState = {
 const authStatus = document.querySelector<HTMLParagraphElement>('#auth-status')!;
 const watcherStatus = document.querySelector<HTMLParagraphElement>('#watcher-status')!;
 const uploadStatus = document.querySelector<HTMLParagraphElement>('#upload-status')!;
+const authChip = document.querySelector<HTMLDivElement>('#auth-chip')!;
+const authSummary = document.querySelector<HTMLParagraphElement>('#auth-summary')!;
+const watcherSummary = document.querySelector<HTMLParagraphElement>('#watcher-summary')!;
+const uploadSummary = document.querySelector<HTMLParagraphElement>('#upload-summary')!;
 const uploadProgress = document.querySelector<HTMLDivElement>('#upload-progress')!;
 const uploadProgressLabel = document.querySelector<HTMLDivElement>('#upload-progress-label')!;
 const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progress-fill')!;
@@ -282,9 +286,19 @@ async function stopWatcher(): Promise<void> {
 }
 
 function render(state: AppState): void {
-  authStatus.innerHTML = `<strong>Auth:</strong> ${escapeHtml(state.authMessage)}`;
-  watcherStatus.innerHTML = `<strong>Watcher:</strong> ${escapeHtml(state.watcherMessage)}`;
-  uploadStatus.innerHTML = `<strong>Uploads:</strong> ${escapeHtml(state.uploadMessage)}`;
+  const authText = escapeHtml(state.authMessage);
+  const watcherText = escapeHtml(state.watcherMessage);
+  const uploadText = escapeHtml(state.uploadMessage);
+  const isAuthed = state.isAuthenticated;
+
+  authStatus.innerHTML = `<strong>Auth:</strong> ${authText}`;
+  watcherStatus.innerHTML = `<strong>Watcher:</strong> ${watcherText}`;
+  uploadStatus.innerHTML = `<strong>Uploads:</strong> ${uploadText}`;
+  authSummary.textContent = isAuthed ? 'Connected' : 'Signed out';
+  watcherSummary.textContent = state.watcherRunning ? 'Active' : 'Stopped';
+  uploadSummary.textContent = state.uploadInProgress ? 'Uploading...' : state.uploadMessage;
+  authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
+  authChip.classList.toggle('auth-chip--ok', isAuthed);
   uploadProgress.hidden = !state.uploadInProgress && state.uploadProgress <= 0;
   uploadProgressLabel.textContent = state.uploadInProgress
     ? `Uploading... ${Math.round(state.uploadProgress)}%`

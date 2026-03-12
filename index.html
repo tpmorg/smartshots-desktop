@@ -7,56 +7,93 @@
   </head>
   <body>
     <div class="app-shell">
-      <h1 class="heading">Smartshots Desktop</h1>
-      <div class="status-stack">
-        <p class="status" id="auth-status">Auth: checking...</p>
-        <p class="status" id="watcher-status">Watcher: stopped</p>
-        <p class="status" id="upload-status">Uploads: idle</p>
-      </div>
-      <div class="upload-progress" id="upload-progress" hidden>
-        <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
-        <div class="upload-progress__track">
-          <div class="upload-progress__fill" id="upload-progress-fill"></div>
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="/src/assets/smartshots-logo.svg" alt="Smartshots logo" class="brand-logo" />
+          <div>
+            <p class="brand-name">Smartshots</p>
+            <p class="brand-subtitle">Desktop Sync</p>
+          </div>
         </div>
-      </div>
 
-      <div class="row">
-        <button id="signin-btn">Sign in with Google</button>
-        <button id="signout-btn" class="secondary">Sign out</button>
-      </div>
+        <nav class="nav">
+          <button class="nav-item nav-item--active" type="button">Dashboard</button>
+        </nav>
 
-      <div class="row">
-        <button id="watcher-btn">Start watcher</button>
-      </div>
+        <section class="sidebar-section">
+          <p class="sidebar-heading">Status</p>
+          <div class="status-list">
+            <p class="status" id="auth-status">Auth: checking...</p>
+            <p class="status" id="watcher-status">Watcher: stopped</p>
+            <p class="status" id="upload-status">Uploads: idle</p>
+          </div>
+        </section>
 
-      <div class="row">
-        <label>
-          <input id="notifications-toggle" type="checkbox" />
-          Enable system notifications
-        </label>
-      </div>
+        <section class="sidebar-section">
+          <p class="sidebar-heading">Preferences</p>
+          <div class="toggle-list">
+            <label>
+              <input id="notifications-toggle" type="checkbox" />
+              Enable notifications
+            </label>
+            <label>
+              <input id="watcher-autostart-toggle" type="checkbox" />
+              Auto-start watcher
+            </label>
+            <label>
+              <input id="hide-to-tray-toggle" type="checkbox" />
+              Hide to tray on close
+            </label>
+          </div>
+        </section>
+      </aside>
 
-      <div class="row">
-        <label>
-          <input id="watcher-autostart-toggle" type="checkbox" />
-          Auto-start watcher after app launch
-        </label>
-      </div>
+      <main class="main-panel">
+        <header class="main-header">
+          <div>
+            <h1 class="heading">Syncing Screenshots to AI Backend</h1>
+            <p class="subheading">Automatic screenshot sync with Smartshots processing.</p>
+          </div>
+          <div class="auth-chip" id="auth-chip">Signed out</div>
+        </header>
 
-      <div class="row">
-        <label>
-          <input id="hide-to-tray-toggle" type="checkbox" />
-          Hide window to tray when closing
-        </label>
-      </div>
+        <section class="cards-grid">
+          <article class="card">
+            <p class="card-title">Authentication</p>
+            <p class="card-value" id="auth-summary">Checking...</p>
+          </article>
+          <article class="card">
+            <p class="card-title">Watcher</p>
+            <p class="card-value" id="watcher-summary">Stopped</p>
+          </article>
+          <article class="card">
+            <p class="card-title">Latest Upload</p>
+            <p class="card-value" id="upload-summary">Idle</p>
+          </article>
+        </section>
 
-      <div class="row">
-        <button id="website-btn" class="secondary">Go to Website</button>
-        <button id="quit-btn" class="secondary">Quit App</button>
-      </div>
+        <section class="queue-section">
+          <div class="section-row">
+            <p class="section-title">Default Screenshot Directories</p>
+            <button id="watcher-btn" class="secondary">Start watcher</button>
+          </div>
+          <ul id="dirs-list" class="dirs-list"></ul>
+        </section>
 
-      <p class="section-title">Default screenshot directories</p>
-      <ul id="dirs-list"></ul>
+        <section class="action-row">
+          <button id="signin-btn">Sign in with Google</button>
+          <button id="signout-btn" class="secondary">Sign out</button>
+          <button id="website-btn" class="secondary">Go to Website</button>
+          <button id="quit-btn" class="danger">Quit App</button>
+        </section>
+
+        <section class="upload-progress" id="upload-progress" hidden>
+          <div class="upload-progress__label" id="upload-progress-label">Uploading...</div>
+          <div class="upload-progress__track">
+            <div class="upload-progress__fill" id="upload-progress-fill"></div>
+          </div>
+        </section>
+      </main>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
