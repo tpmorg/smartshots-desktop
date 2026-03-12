@@ -12,7 +12,7 @@ use std::{
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tauri::{menu::{Menu, MenuItem, Submenu}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, PhysicalSize, Size, State};
+use tauri::{menu::{Menu, MenuItem}, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager, PhysicalSize, Size, State};
 use tauri_plugin_opener::OpenerExt;
 use url::form_urlencoded;
 
@@ -331,10 +331,11 @@ fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
     let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
     let website = MenuItem::with_id(app, "website", "Go to Website", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let actions = Submenu::with_items(app, "Smartshots", true, &[&settings, &website, &quit])?;
-    let menu = Menu::with_items(app, &[&actions])?;
+    let menu = Menu::with_items(app, &[&settings, &website, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
+        .icon(tauri::include_image!("icons/icon.png"))
+        .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
