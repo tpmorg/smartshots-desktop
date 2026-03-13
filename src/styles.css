@@ -162,8 +162,8 @@ body {
   content: '';
   position: absolute;
   left: 0;
-  top: 6px;
-  bottom: 6px;
+  top: 0;
+  bottom: 0;
   width: 3px;
   background: #8ec2ff;
 }
