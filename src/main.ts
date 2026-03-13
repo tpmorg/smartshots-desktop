@@ -17,6 +17,7 @@ import {
 } from './preferences';
 import {
   getRecentUploadedEntries,
+  getUploadStats,
   getUnprocessedPaths,
   hasUploaded,
   hasIgnored,
@@ -35,7 +36,7 @@ type OAuthCallbackPayload = {
   url: string;
 };
 
-type AppView = 'dashboard' | 'history' | 'settings';
+type AppView = 'dashboard' | 'settings';
 
 type AppState = {
   activeView: AppView;
@@ -53,6 +54,8 @@ type AppState = {
   autoSyncNewScreenshots: boolean;
   reviewBacklogOnLaunch: boolean;
   screenshotDirs: string[];
+  processedTotal: number;
+  lastSyncTs: number | null;
   backlogCount: number;
   backlogPaths: string[];
   backlogSelected: string[];
@@ -66,16 +69,16 @@ const uploadProgress = document.querySelector<HTMLDivElement>('#upload-progress'
 const uploadProgressLabel = document.querySelector<HTMLDivElement>('#upload-progress-label')!;
 const uploadProgressFill = document.querySelector<HTMLDivElement>('#upload-progress-fill')!;
 const dirsList = document.querySelector<HTMLUListElement>('#dirs-list')!;
+const processedTotal = document.querySelector<HTMLParagraphElement>('#processed-total')!;
+const lastSyncTime = document.querySelector<HTMLParagraphElement>('#last-sync-time')!;
 const backlogList = document.querySelector<HTMLUListElement>('#backlog-list')!;
 const backlogEmpty = document.querySelector<HTMLDivElement>('#backlog-empty')!;
 const watcherCard = document.querySelector<HTMLElement>('#watcher-card')!;
 const recentUploadsList = document.querySelector<HTMLUListElement>('#recent-uploads-list')!;
 const recentUploadsEmpty = document.querySelector<HTMLDivElement>('#recent-uploads-empty')!;
 const viewDashboard = document.querySelector<HTMLElement>('#view-dashboard')!;
-const viewHistory = document.querySelector<HTMLElement>('#view-history')!;
 const viewSettings = document.querySelector<HTMLElement>('#view-settings')!;
 const navDashboardBtn = document.querySelector<HTMLButtonElement>('#nav-dashboard-btn')!;
-const navHistoryBtn = document.querySelector<HTMLButtonElement>('#nav-history-btn')!;
 const navSettingsBtn = document.querySelector<HTMLButtonElement>('#nav-settings-btn')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
@@ -127,6 +130,8 @@ const store = createStore<AppState>({
   autoSyncNewScreenshots: true,
   reviewBacklogOnLaunch: true,
   screenshotDirs: [],
+  processedTotal: 0,
+  lastSyncTs: null,
   backlogCount: 0,
   backlogPaths: [],
   backlogSelected: [],
@@ -159,7 +164,12 @@ async function init(): Promise<void> {
       ts: entry.uploadedAt
     }))
   );
-  store.setState({ recentUploadLog });
+  const stats = await getUploadStats();
+  store.setState({
+    recentUploadLog,
+    processedTotal: stats.totalUploaded,
+    lastSyncTs: stats.lastUploadedAt
+  });
 
   if (preferences.reviewBacklogOnLaunch) {
     await refreshBacklogCandidates();
@@ -252,10 +262,6 @@ watcherBtn.addEventListener('click', async () => {
 
 navDashboardBtn.addEventListener('click', () => {
   store.setState({ activeView: 'dashboard' });
-});
-
-navHistoryBtn.addEventListener('click', () => {
-  store.setState({ activeView: 'history' });
 });
 
 navSettingsBtn.addEventListener('click', () => {
@@ -499,7 +505,7 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
 function showIgnoreConfirm(fileName: string, path: string): void {
   pendingIgnorePath = path;
   ignoreConfirmFileName.textContent = fileName;
-  ignoreConfirmText.textContent = `Ignore ${fileName}?`;
+  ignoreConfirmText.textContent = `Remove ${fileName} from the queue? This will not delete the image file.`;
   ignoreConfirmOverlay.hidden = false;
 }
 
@@ -518,10 +524,10 @@ async function confirmIgnoreFromModal(path: string): Promise<void> {
   try {
     await markIgnored(path);
     removeBacklogPaths([path]);
-    store.setState({ uploadMessage: `ignored ${fileName}` });
+    store.setState({ uploadMessage: `removed from queue: ${fileName}` });
   } catch (error) {
     console.error('[smartshots] failed to ignore', { path, error });
-    store.setState({ uploadMessage: `ignore failed (${String(error)})` });
+    store.setState({ uploadMessage: `remove failed (${String(error)})` });
   }
 }
 
@@ -559,7 +565,6 @@ async function stopWatcher(): Promise<void> {
 function render(state: AppState): void {
   const isAuthed = state.isAuthenticated;
   const onDashboard = state.activeView === 'dashboard';
-  const onHistory = state.activeView === 'history';
   const onSettings = state.activeView === 'settings';
 
   signedInAs.textContent = state.signedInUserLabel ? `Signed in as ${state.signedInUserLabel}` : '';
@@ -571,10 +576,8 @@ function render(state: AppState): void {
   authChip.textContent = isAuthed ? 'Signed In' : 'Signed Out';
   authChip.classList.toggle('auth-chip--ok', isAuthed);
   viewDashboard.hidden = !onDashboard;
-  viewHistory.hidden = !onHistory;
   viewSettings.hidden = !onSettings;
   navDashboardBtn.classList.toggle('nav-item--active', onDashboard);
-  navHistoryBtn.classList.toggle('nav-item--active', onHistory);
   navSettingsBtn.classList.toggle('nav-item--active', onSettings);
   uploadProgress.classList.toggle('upload-progress--active', state.uploadInProgress);
   uploadProgress.classList.toggle(
@@ -589,6 +592,8 @@ function render(state: AppState): void {
       ? 'Upload complete'
       : 'Uploading...';
   uploadProgressFill.style.width = `${Math.max(0, Math.min(100, state.uploadProgress))}%`;
+  processedTotal.textContent = String(state.processedTotal);
+  lastSyncTime.textContent = state.lastSyncTs ? formatLastSync(state.lastSyncTs) : 'No sync yet';
 
   signinBtn.hidden = state.isAuthenticated;
   signoutBtn.hidden = !state.isAuthenticated;
@@ -613,6 +618,7 @@ function render(state: AppState): void {
   }
 
   backlogEmpty.hidden = state.backlogPaths.length > 0;
+  backlogList.classList.toggle('backlog-list--scroll', state.backlogPaths.length > 1);
   backlogUploadBtn.disabled = state.backlogSelected.length === 0 || !state.isAuthenticated;
   renderRecentUploads(state.recentUploadLog);
   void renderBacklogList(state.backlogPaths, state.backlogSelected);
@@ -654,7 +660,7 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
       ignoreBtn.className = 'secondary ignore-btn';
       ignoreBtn.dataset.action = 'ignore';
       ignoreBtn.dataset.path = path;
-      ignoreBtn.textContent = 'Ignore';
+      ignoreBtn.textContent = 'Remove';
 
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
@@ -757,6 +763,8 @@ async function uploadOneScreenshot(filePath: string, source: 'watcher' | 'backlo
 
     const uploadedName = await basename(filePath);
     store.setState((s) => ({
+      processedTotal: s.processedTotal + 1,
+      lastSyncTs: Date.now(),
       recentUploadLog: [...s.recentUploadLog.slice(-4), { name: uploadedName, path: filePath, ts: Date.now() }]
     }));
 
@@ -878,6 +886,17 @@ function openImagePreview(src: string): void {
 function closeImagePreview(): void {
   imagePreviewOverlay.hidden = true;
   imagePreviewImage.src = '';
+}
+
+function formatLastSync(ts: number): string {
+  const d = new Date(ts);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const meridiem = d.getHours() >= 12 ? 'PM' : 'AM';
+  const hour12 = d.getHours() % 12 || 12;
+  return `${month}/${day}/${year} ${hour12}:${minutes}${meridiem}`;
 }
 
 void init();

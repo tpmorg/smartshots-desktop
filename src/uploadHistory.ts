@@ -171,6 +171,26 @@ export async function getRecentUploadedEntries(
     .slice(0, Math.max(1, limit));
 }
 
+export async function getUploadStats(): Promise<{ totalUploaded: number; lastUploadedAt: number | null }> {
+  const cache = await getCache();
+  let totalUploaded = 0;
+  let lastUploadedAt: number | null = null;
+
+  for (const record of Object.values(cache.data.byPath)) {
+    if (record.status !== 'uploaded') {
+      continue;
+    }
+
+    totalUploaded += 1;
+    const ts = record.uploadedAt ?? record.lastAttemptAt ?? null;
+    if (ts && (lastUploadedAt === null || ts > lastUploadedAt)) {
+      lastUploadedAt = ts;
+    }
+  }
+
+  return { totalUploaded, lastUploadedAt };
+}
+
 async function pruneUploadHistoryInternal(cache: Cache): Promise<boolean> {
   const now = Date.now();
   const entries = Object.entries(cache.data.byPath);

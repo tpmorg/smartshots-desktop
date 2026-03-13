@@ -27,6 +27,7 @@
             </span>
             <span class="nav-label">Dashboard</span>
           </button>
+          <!--
           <button id="nav-history-btn" class="nav-item" type="button">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" role="presentation">
@@ -38,6 +39,7 @@
             </span>
             <span class="nav-label">Processing History</span>
           </button>
+          -->
           <button id="nav-settings-btn" class="nav-item" type="button">
             <span class="nav-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" role="presentation">
@@ -73,10 +75,20 @@
               <div class="upload-progress__fill" id="upload-progress-fill"></div>
             </div>
           </section>
+          <section class="sync-stats-widget">
+            <article class="sync-stat-card">
+              <p class="sync-stat-label">Total Screenshots Processed</p>
+              <p class="sync-stat-value" id="processed-total">0</p>
+            </article>
+            <article class="sync-stat-card sync-stat-card--accent">
+              <p class="sync-stat-label">Last Sync</p>
+              <p class="sync-stat-time" id="last-sync-time">No sync yet</p>
+            </article>
+          </section>
 
           <section class="queue-section">
             <div class="section-row">
-              <p class="section-title">Backlog Review</p>
+              <p class="section-title">Screenshot Queue</p>
               <div class="mini-actions">
                 <button id="backlog-select-all-btn" class="secondary">Select all</button>
                 <button id="backlog-clear-btn" class="secondary">Clear</button>
@@ -89,7 +101,6 @@
 
           <section class="action-row">
             <button id="signin-btn">Sign in with Google</button>
-            <button id="signout-btn" class="secondary">Sign out</button>
           </section>
         </section>
 
@@ -171,6 +182,7 @@
             <ul id="dirs-list" class="dirs-list"></ul>
           </section>
           <div class="settings-actions">
+            <button id="signout-btn" class="secondary">Sign out</button>
             <button id="website-btn" class="secondary">Go to Website</button>
             <button id="quit-btn" class="danger">Quit App</button>
           </div>
@@ -178,12 +190,12 @@
 
         <div id="ignore-confirm-overlay" class="confirm-overlay" hidden>
           <div class="confirm-modal">
-            <p class="confirm-modal__title">Ignore Screenshot</p>
-            <p class="confirm-modal__text" id="ignore-confirm-text">Ignore this screenshot?</p>
+            <p class="confirm-modal__title">Remove From Queue</p>
+            <p class="confirm-modal__text" id="ignore-confirm-text">Remove this screenshot from the queue? This will not delete the image file.</p>
             <p class="confirm-modal__filename" id="ignore-confirm-filename"></p>
             <div class="confirm-modal__actions">
               <button id="ignore-confirm-cancel" class="secondary" type="button">Cancel</button>
-              <button id="ignore-confirm-ignore" type="button">Ignore</button>
+              <button id="ignore-confirm-ignore" type="button">Remove</button>
             </div>
           </div>
         </div>
