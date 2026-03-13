@@ -328,7 +328,7 @@ fn extract_capture_url(path_and_query: &str) -> Option<String> {
 }
 
 fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
-    let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "Open Smartshots", true, None::<&str>)?;
     let website = MenuItem::with_id(app, "website", "Go to Website", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&settings, &website, &quit])?;
@@ -342,6 +342,8 @@ fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
             match event.id().as_ref() {
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
+                        #[cfg(target_os = "macos")]
+                        let _ = app.set_dock_visibility(true);
                         let _ = window.show();
                         let _ = window.set_focus();
                     }
@@ -386,6 +388,8 @@ fn main() {
                 {
                     if button == MouseButton::Left && button_state == MouseButtonState::Up {
                         if let Some(window) = _app_handle.get_webview_window("main") {
+                            #[cfg(target_os = "macos")]
+                            let _ = _app_handle.set_dock_visibility(true);
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -410,6 +414,8 @@ fn main() {
                         let should_hide = hide_to_tray_state.lock().map(|v| *v).unwrap_or(true);
                         if should_hide {
                             api.prevent_close();
+                            #[cfg(target_os = "macos")]
+                            let _ = window_for_close.app_handle().set_dock_visibility(false);
                             let _ = window_for_close.hide();
                         }
                     }
