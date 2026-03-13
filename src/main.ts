@@ -628,9 +628,21 @@ function render(state: AppState): void {
 async function renderBacklogList(paths: string[], selectedPaths: string[]): Promise<void> {
   const token = ++backlogRenderToken;
   const selectedSet = new Set(selectedPaths);
+  const sortedPaths = [...paths];
+  const sortTsByPath = new Map<string, number>();
+
+  await Promise.all(
+    sortedPaths.map(async (path) => {
+      const modifiedTs = await getBacklogFileModifiedAt(path);
+      const ts = modifiedTs ?? backlogQueuedAt.get(path) ?? 0;
+      sortTsByPath.set(path, ts);
+    })
+  );
+
+  sortedPaths.sort((a, b) => (sortTsByPath.get(b) ?? 0) - (sortTsByPath.get(a) ?? 0));
 
   const listElements = await Promise.all(
-    paths.map(async (path) => {
+    sortedPaths.map(async (path) => {
       const li = document.createElement('li');
       li.className = 'backlog-item';
 
