@@ -113,6 +113,7 @@ let uploadProgressTimer: number | null = null;
 let backlogRenderToken = 0;
 let pendingIgnorePath: string | null = null;
 const backlogQueuedAt = new Map<string, number>();
+const backlogFileModifiedAt = new Map<string, number>();
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const store = createStore<AppState>({
   activeView: 'dashboard',
@@ -648,7 +649,7 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
 
       const timeEl = document.createElement('p');
       timeEl.className = 'backlog-time';
-      timeEl.textContent = formatBacklogDate(path);
+      timeEl.textContent = await formatBacklogDate(path);
       meta.appendChild(nameEl);
       meta.appendChild(timeEl);
 
@@ -849,6 +850,7 @@ function removeBacklogPaths(paths: string[]): void {
   const toRemove = new Set(paths);
   paths.forEach((path) => {
     backlogQueuedAt.delete(path);
+    backlogFileModifiedAt.delete(path);
   });
   store.setState((state) => {
     const nextPaths = state.backlogPaths.filter((path) => !toRemove.has(path));
@@ -865,8 +867,9 @@ function escapeHtml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
-function formatBacklogDate(path: string): string {
-  const ts = backlogQueuedAt.get(path) ?? Date.now();
+async function formatBacklogDate(path: string): Promise<string> {
+  const modifiedTs = await getBacklogFileModifiedAt(path);
+  const ts = modifiedTs ?? backlogQueuedAt.get(path) ?? Date.now();
   const d = new Date(ts);
   const weekday = WEEKDAY_SHORT[d.getDay()] ?? '---';
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -876,6 +879,25 @@ function formatBacklogDate(path: string): string {
   const meridiem = d.getHours() >= 12 ? 'PM' : 'AM';
   const hour12 = d.getHours() % 12 || 12;
   return `${weekday} ${month}/${day}/${year} ${hour12}:${minutes}${meridiem}`;
+}
+
+async function getBacklogFileModifiedAt(path: string): Promise<number | null> {
+  const cached = backlogFileModifiedAt.get(path);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  try {
+    const ts = await invoke<number | null>('get_screenshot_modified_ms', { path });
+    if (typeof ts === 'number' && Number.isFinite(ts)) {
+      backlogFileModifiedAt.set(path, ts);
+      return ts;
+    }
+  } catch {
+    // fall back to queue timestamp if metadata lookup fails
+  }
+
+  return null;
 }
 
 function openImagePreview(src: string): void {

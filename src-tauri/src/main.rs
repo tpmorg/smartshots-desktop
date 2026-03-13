@@ -93,6 +93,25 @@ fn list_recent_screenshots(max_items: Option<usize>, lookback_hours: Option<u64>
 }
 
 #[tauri::command]
+fn get_screenshot_modified_ms(path: String) -> Result<Option<u64>, String> {
+    let path_buf = PathBuf::from(path);
+    if !path_buf.is_file() {
+        return Ok(None);
+    }
+
+    let metadata = fs::metadata(&path_buf).map_err(|e| format!("metadata failed: {}", e))?;
+    let modified = metadata
+        .modified()
+        .or_else(|_| metadata.created())
+        .map_err(|e| format!("modified time failed: {}", e))?;
+    let millis = modified
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| format!("invalid modified time: {}", e))?
+        .as_millis() as u64;
+    Ok(Some(millis))
+}
+
+#[tauri::command]
 fn start_screenshot_watcher(app: AppHandle, state: State<'_, SharedState>) -> Result<(), String> {
     let mut watcher_state = state.watcher.lock().map_err(|_| "watcher lock poisoned")?;
     if watcher_state.is_running {
@@ -426,6 +445,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_default_screenshot_dirs,
             list_recent_screenshots,
+            get_screenshot_modified_ms,
             start_screenshot_watcher,
             stop_screenshot_watcher,
             get_oauth_redirect_url,
