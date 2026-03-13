@@ -95,6 +95,9 @@ const ignoreConfirmFileName = document.querySelector<HTMLSpanElement>('#ignore-c
 const ignoreConfirmText = document.querySelector<HTMLParagraphElement>('#ignore-confirm-text')!;
 const ignoreConfirmCancelBtn = document.querySelector<HTMLButtonElement>('#ignore-confirm-cancel')!;
 const ignoreConfirmIgnoreBtn = document.querySelector<HTMLButtonElement>('#ignore-confirm-ignore')!;
+const imagePreviewOverlay = document.querySelector<HTMLDivElement>('#image-preview-overlay')!;
+const imagePreviewCloseBtn = document.querySelector<HTMLButtonElement>('#image-preview-close')!;
+const imagePreviewImage = document.querySelector<HTMLImageElement>('#image-preview-image')!;
 
 assertEnv();
 
@@ -106,6 +109,8 @@ let uploadSequence = 0;
 let uploadProgressTimer: number | null = null;
 let backlogRenderToken = 0;
 let pendingIgnorePath: string | null = null;
+const backlogQueuedAt = new Map<string, number>();
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const store = createStore<AppState>({
   activeView: 'dashboard',
   isAuthenticated: false,
@@ -354,6 +359,18 @@ backlogList.addEventListener('change', (event) => {
 
 backlogList.addEventListener('click', async (event) => {
   const target = event.target;
+  const thumbnail = target instanceof HTMLElement
+    ? target.closest('img.backlog-thumb') as HTMLImageElement | null
+    : null;
+  if (thumbnail) {
+    event.preventDefault();
+    openImagePreview(thumbnail.src);
+    return;
+  }
+});
+
+backlogList.addEventListener('click', async (event) => {
+  const target = event.target;
   const button = target instanceof HTMLElement
     ? target.closest('button[data-action="ignore"]') as HTMLButtonElement | null
     : null;
@@ -388,6 +405,16 @@ ignoreConfirmIgnoreBtn.addEventListener('click', async () => {
 ignoreConfirmOverlay.addEventListener('click', (event) => {
   if (event.target === ignoreConfirmOverlay) {
     ignoreConfirmCancelBtn.click();
+  }
+});
+
+imagePreviewCloseBtn.addEventListener('click', () => {
+  closeImagePreview();
+});
+
+imagePreviewOverlay.addEventListener('click', (event) => {
+  if (event.target === imagePreviewOverlay) {
+    closeImagePreview();
   }
 });
 
@@ -604,20 +631,20 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
       img.className = 'backlog-thumb';
       img.alt = 'Screenshot preview';
       img.src = await getThumbnailUrl(path);
+      img.dataset.path = path;
 
       const meta = document.createElement('div');
       meta.className = 'backlog-meta';
 
       const nameEl = document.createElement('p');
       nameEl.className = 'backlog-name';
-      nameEl.textContent = await basename(path);
+      nameEl.textContent = await basename(path).catch(() => path.split(/[\\/]/).pop() ?? path);
 
-      const pathEl = document.createElement('p');
-      pathEl.className = 'backlog-path';
-      pathEl.textContent = path;
-
+      const timeEl = document.createElement('p');
+      timeEl.className = 'backlog-time';
+      timeEl.textContent = formatBacklogDate(path);
       meta.appendChild(nameEl);
-      meta.appendChild(pathEl);
+      meta.appendChild(timeEl);
 
       const actions = document.createElement('div');
       actions.className = 'backlog-actions';
@@ -785,6 +812,13 @@ function addBacklogPaths(paths: string[]): void {
     return;
   }
 
+  const now = Date.now();
+  paths.forEach((path) => {
+    if (!backlogQueuedAt.has(path)) {
+      backlogQueuedAt.set(path, now);
+    }
+  });
+
   store.setState((state) => {
     const merged = new Set(state.backlogPaths);
     paths.forEach((path) => merged.add(path));
@@ -805,6 +839,9 @@ function removeBacklogPaths(paths: string[]): void {
   }
 
   const toRemove = new Set(paths);
+  paths.forEach((path) => {
+    backlogQueuedAt.delete(path);
+  });
   store.setState((state) => {
     const nextPaths = state.backlogPaths.filter((path) => !toRemove.has(path));
     const nextSelected = state.backlogSelected.filter((path) => !toRemove.has(path));
@@ -818,6 +855,29 @@ function removeBacklogPaths(paths: string[]): void {
 
 function escapeHtml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function formatBacklogDate(path: string): string {
+  const ts = backlogQueuedAt.get(path) ?? Date.now();
+  const d = new Date(ts);
+  const weekday = WEEKDAY_SHORT[d.getDay()] ?? '---';
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = d.getFullYear();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const meridiem = d.getHours() >= 12 ? 'PM' : 'AM';
+  const hour12 = d.getHours() % 12 || 12;
+  return `${weekday} ${month}/${day}/${year} ${hour12}:${minutes}${meridiem}`;
+}
+
+function openImagePreview(src: string): void {
+  imagePreviewImage.src = src;
+  imagePreviewOverlay.hidden = false;
+}
+
+function closeImagePreview(): void {
+  imagePreviewOverlay.hidden = true;
+  imagePreviewImage.src = '';
 }
 
 void init();

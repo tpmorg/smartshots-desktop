@@ -345,37 +345,45 @@ body {
   padding: 8px;
   background: #142948cc;
   display: grid;
-  grid-template-columns: 120px 1fr auto;
+  grid-template-columns: 240px 1fr auto;
   gap: 10px;
   align-items: center;
 }
 
 .backlog-thumb {
-  width: 120px;
-  height: 84px;
+  width: 240px;
+  height: 168px;
   border-radius: 4px;
   object-fit: cover;
   border: 1px solid #4d6f9f;
   background: #0c1932;
+  cursor: zoom-in;
 }
 
 .backlog-meta {
   min-width: 0;
-}
-
-.backlog-path {
-  margin: 0;
-  font-size: 11px;
-  color: #dce7ff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
 }
 
 .backlog-name {
-  margin: 0 0 4px;
+  margin: 0;
+  font-size: 15px;
+  color: #e2ecff;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.backlog-time {
+  margin: 0;
   font-size: 13px;
-  font-weight: 700;
+  color: #c3d5f4;
+  letter-spacing: 0.02em;
 }
 
 .backlog-actions {
@@ -721,6 +729,44 @@ button:disabled {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 12, 28, 0.76);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+
+.image-preview-modal {
+  width: min(1100px, calc(100% - 56px));
+  max-height: calc(100vh - 56px);
+  border: 1px solid #49658e;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #132949, #0f2038);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.image-preview-close {
+  align-self: flex-end;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.image-preview-image {
+  width: 100%;
+  max-height: calc(100vh - 140px);
+  object-fit: contain;
+  border: 1px solid #446591;
+  border-radius: 6px;
+  background: #071427;
 }
 
 .toggle-switch {

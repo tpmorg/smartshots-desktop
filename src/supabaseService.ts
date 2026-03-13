@@ -19,6 +19,19 @@ export type UploadResult = {
   sizeBytes: number;
 };
 
+const MIN_COMPRESSION_GAIN = 0.03;
+const WEBP_ATTEMPTS = [
+  { maxWidthOrHeight: 3000, initialQuality: 0.94 },
+  { maxWidthOrHeight: 2560, initialQuality: 0.92 },
+  { maxWidthOrHeight: 2560, initialQuality: 0.88 },
+  { maxWidthOrHeight: 2200, initialQuality: 0.84 }
+];
+const JPEG_ATTEMPTS = [
+  { maxWidthOrHeight: 3000, initialQuality: 0.92 },
+  { maxWidthOrHeight: 2560, initialQuality: 0.89 },
+  { maxWidthOrHeight: 2200, initialQuality: 0.85 }
+];
+
 export class SupabaseService {
   private supabase: SupabaseClient;
   private authHandlers = new Set<AuthChangeHandler>();
@@ -137,20 +150,11 @@ export class SupabaseService {
     const sourceBytes = await readFile(filePath);
     const fileName = await basename(filePath);
 
-    const originalExtension = getExtension(fileName);
     const originalType = guessContentType(fileName);
     const sourceBlob = new Blob([sourceBytes], { type: originalType });
     const sourceFile = new File([sourceBlob], fileName, { type: sourceBlob.type });
-
-    const compressed = await imageCompression(sourceFile, {
-      maxSizeMB: 2,
-      maxWidthOrHeight: 2560,
-      useWebWorker: true,
-      initialQuality: 0.85
-    });
-
-    const uploadType = compressed.type || originalType || 'application/octet-stream';
-    const compressedFile = new File([compressed], fileName, { type: uploadType });
+    const compressedFile = await compressForUpload(sourceFile);
+    const uploadType = compressedFile.type || originalType || 'application/octet-stream';
     const uploadSource = getUploadSource();
     const metadata = {
       timestamp: Date.now(),
@@ -281,12 +285,53 @@ function guessContentType(name: string): string {
   return 'application/octet-stream';
 }
 
-function getExtension(name: string): string {
-  const idx = name.lastIndexOf('.');
-  if (idx < 0 || idx === name.length - 1) {
-    return 'bin';
+async function compressForUpload(sourceFile: File): Promise<File> {
+  let bestCandidate: File = sourceFile;
+
+  for (const attempt of WEBP_ATTEMPTS) {
+    const compressed = await imageCompression(sourceFile, {
+      maxSizeMB: 3,
+      maxWidthOrHeight: attempt.maxWidthOrHeight,
+      useWebWorker: true,
+      initialQuality: attempt.initialQuality,
+      fileType: 'image/webp',
+      preserveExif: false
+    });
+    const candidate = toUploadFile(compressed, sourceFile.name, 'image/webp');
+    if (candidate.size < bestCandidate.size) {
+      bestCandidate = candidate;
+    }
   }
-  return name.slice(idx + 1).toLowerCase();
+
+  for (const attempt of JPEG_ATTEMPTS) {
+    const compressed = await imageCompression(sourceFile, {
+      maxSizeMB: 3,
+      maxWidthOrHeight: attempt.maxWidthOrHeight,
+      useWebWorker: true,
+      initialQuality: attempt.initialQuality,
+      fileType: 'image/jpeg',
+      preserveExif: false
+    });
+    const candidate = toUploadFile(compressed, sourceFile.name, 'image/jpeg');
+    if (candidate.size < bestCandidate.size) {
+      bestCandidate = candidate;
+    }
+  }
+
+  const gainRatio = 1 - bestCandidate.size / sourceFile.size;
+  if (gainRatio < MIN_COMPRESSION_GAIN) {
+    return sourceFile;
+  }
+
+  return bestCandidate;
+}
+
+function toUploadFile(blob: Blob, originalName: string, fallbackType: 'image/webp' | 'image/jpeg'): File {
+  const type = blob.type || fallbackType;
+  const extension = type === 'image/webp' ? 'webp' : 'jpg';
+  const dotIndex = originalName.lastIndexOf('.');
+  const baseName = dotIndex > 0 ? originalName.slice(0, dotIndex) : originalName;
+  return new File([blob], `${baseName}.${extension}`, { type });
 }
 
 function getUploadSource(): 'mac_app' | 'win_app' | 'desktop_app' {
