@@ -783,6 +783,41 @@ button:disabled {
   gap: 10px;
 }
 
+.email-signin-fields {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.email-signin-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #c7d9f8;
+}
+
+.email-signin-field input {
+  width: 100%;
+  border: 1px solid #4a678f;
+  border-radius: 7px;
+  background: #11233d;
+  color: #e8f1ff;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.email-signin-field input:focus {
+  outline: none;
+  border-color: #6f9edb;
+  box-shadow: 0 0 0 2px rgba(111, 158, 219, 0.2);
+}
+
+.email-signin-error {
+  margin: 10px 0 0;
+  color: #ff98a4;
+  font-size: 12px;
+}
+
 .image-preview-overlay {
   position: fixed;
   inset: 0;

@@ -103,6 +103,17 @@ export class SupabaseService {
     await openUrl(data.url);
   }
 
+  async signInWithPassword(email: string, password: string): Promise<void> {
+    const { error } = await this.supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      throw error;
+    }
+  }
+
   async handleAuthCallback(url: string): Promise<boolean> {
     try {
       const callbackUrl = new URL(url);

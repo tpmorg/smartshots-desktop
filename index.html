@@ -97,6 +97,7 @@
 
           <section class="action-row">
             <button id="signin-btn">Sign in with Google</button>
+            <button id="signin-email-btn" class="secondary">Sign in with Email</button>
           </section>
         </section>
 
@@ -200,6 +201,28 @@
           <div class="image-preview-modal">
             <button id="image-preview-close" class="secondary image-preview-close" type="button">Close</button>
             <img id="image-preview-image" class="image-preview-image" alt="Screenshot preview" />
+          </div>
+        </div>
+
+        <div id="email-signin-overlay" class="confirm-overlay" hidden>
+          <div class="confirm-modal">
+            <p class="confirm-modal__title">Sign In With Email</p>
+            <p class="confirm-modal__text">Use the same email/password as your Smartshots web app account.</p>
+            <div class="email-signin-fields">
+              <label class="email-signin-field">
+                <span>Email</span>
+                <input id="email-signin-input" type="email" autocomplete="email" />
+              </label>
+              <label class="email-signin-field">
+                <span>Password</span>
+                <input id="password-signin-input" type="password" autocomplete="current-password" />
+              </label>
+            </div>
+            <p id="email-signin-error" class="email-signin-error" hidden>Invalid email or password.</p>
+            <div class="confirm-modal__actions">
+              <button id="email-signin-cancel" class="secondary" type="button">Cancel</button>
+              <button id="email-signin-submit" type="button">Sign in</button>
+            </div>
           </div>
         </div>
       </main>

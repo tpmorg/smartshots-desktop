@@ -81,6 +81,7 @@ const viewSettings = document.querySelector<HTMLElement>('#view-settings')!;
 const navDashboardBtn = document.querySelector<HTMLButtonElement>('#nav-dashboard-btn')!;
 const navSettingsBtn = document.querySelector<HTMLButtonElement>('#nav-settings-btn')!;
 const signinBtn = document.querySelector<HTMLButtonElement>('#signin-btn')!;
+const signinEmailBtn = document.querySelector<HTMLButtonElement>('#signin-email-btn')!;
 const signoutBtn = document.querySelector<HTMLButtonElement>('#signout-btn')!;
 const watcherBtn = document.querySelector<HTMLButtonElement>('#watcher-btn')!;
 const notificationsToggle = document.querySelector<HTMLInputElement>('#notifications-toggle')!;
@@ -101,6 +102,12 @@ const ignoreConfirmIgnoreBtn = document.querySelector<HTMLButtonElement>('#ignor
 const imagePreviewOverlay = document.querySelector<HTMLDivElement>('#image-preview-overlay')!;
 const imagePreviewCloseBtn = document.querySelector<HTMLButtonElement>('#image-preview-close')!;
 const imagePreviewImage = document.querySelector<HTMLImageElement>('#image-preview-image')!;
+const emailSigninOverlay = document.querySelector<HTMLDivElement>('#email-signin-overlay')!;
+const emailSigninInput = document.querySelector<HTMLInputElement>('#email-signin-input')!;
+const passwordSigninInput = document.querySelector<HTMLInputElement>('#password-signin-input')!;
+const emailSigninError = document.querySelector<HTMLParagraphElement>('#email-signin-error')!;
+const emailSigninCancelBtn = document.querySelector<HTMLButtonElement>('#email-signin-cancel')!;
+const emailSigninSubmitBtn = document.querySelector<HTMLButtonElement>('#email-signin-submit')!;
 
 assertEnv();
 
@@ -238,6 +245,10 @@ signinBtn.addEventListener('click', async () => {
   } catch (error) {
     store.setState({ authMessage: `failed (${String(error)})` });
   }
+});
+
+signinEmailBtn.addEventListener('click', () => {
+  showEmailSigninModal();
 });
 
 signoutBtn.addEventListener('click', async () => {
@@ -425,6 +436,27 @@ imagePreviewOverlay.addEventListener('click', (event) => {
   }
 });
 
+emailSigninCancelBtn.addEventListener('click', () => {
+  hideEmailSigninModal();
+});
+
+emailSigninOverlay.addEventListener('click', (event) => {
+  if (event.target === emailSigninOverlay) {
+    hideEmailSigninModal();
+  }
+});
+
+emailSigninSubmitBtn.addEventListener('click', async () => {
+  await submitEmailSignin();
+});
+
+passwordSigninInput.addEventListener('keydown', async (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    await submitEmailSignin();
+  }
+});
+
 async function handleIgnoreBacklogItem(path: string): Promise<void> {
   try {
     const fileName = await basename(path).catch(() => path.split(/[\\/]/).pop() ?? path);
@@ -597,6 +629,7 @@ function render(state: AppState): void {
   lastSyncTime.textContent = state.lastSyncTs ? formatLastSync(state.lastSyncTs) : 'No sync yet';
 
   signinBtn.hidden = state.isAuthenticated;
+  signinEmailBtn.hidden = state.isAuthenticated;
   signoutBtn.hidden = !state.isAuthenticated;
   watcherBtn.textContent = state.watcherRunning ? 'Stop watcher' : 'Start watcher';
   watcherBtn.disabled = false;
@@ -920,6 +953,50 @@ function openImagePreview(src: string): void {
 function closeImagePreview(): void {
   imagePreviewOverlay.hidden = true;
   imagePreviewImage.src = '';
+}
+
+function showEmailSigninModal(): void {
+  emailSigninError.hidden = true;
+  emailSigninError.textContent = 'Invalid email or password.';
+  emailSigninOverlay.hidden = false;
+  if (!emailSigninInput.value) {
+    emailSigninInput.value = '';
+  }
+  passwordSigninInput.value = '';
+  emailSigninInput.focus();
+}
+
+function hideEmailSigninModal(): void {
+  emailSigninOverlay.hidden = true;
+  passwordSigninInput.value = '';
+}
+
+async function submitEmailSignin(): Promise<void> {
+  const email = emailSigninInput.value.trim();
+  const password = passwordSigninInput.value;
+
+  if (!email || !password) {
+    emailSigninError.textContent = 'Enter both email and password.';
+    emailSigninError.hidden = false;
+    return;
+  }
+
+  emailSigninSubmitBtn.disabled = true;
+  emailSigninError.hidden = true;
+  store.setState({ authMessage: 'signing in...' });
+
+  try {
+    await supabase.signInWithPassword(email, password);
+    hideEmailSigninModal();
+    store.setState({ authMessage: 'signed in' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    emailSigninError.textContent = message || 'Sign-in failed.';
+    emailSigninError.hidden = false;
+    store.setState({ authMessage: `failed (${message})` });
+  } finally {
+    emailSigninSubmitBtn.disabled = false;
+  }
 }
 
 function formatLastSync(ts: number): string {
