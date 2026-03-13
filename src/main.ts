@@ -168,7 +168,7 @@ async function init(): Promise<void> {
     signedInUserLabel
   });
 
-  if (authed && preferences.watcherAutostart) {
+  if (preferences.watcherAutostart) {
     await startWatcher();
   }
 
@@ -189,6 +189,7 @@ async function init(): Promise<void> {
         signedInUserLabel
       });
     });
+    void refreshBacklogCandidates();
 
     if (isAuthenticated && store.getState().watcherAutostart && !store.getState().watcherRunning) {
       void startWatcher();
@@ -225,7 +226,6 @@ signinBtn.addEventListener('click', async () => {
 
 signoutBtn.addEventListener('click', async () => {
   try {
-    await stopWatcher();
     await supabase.signOut();
     store.setState({
       isAuthenticated: false,
@@ -427,6 +427,12 @@ async function listenForScreenshots(): Promise<void> {
     }
 
     const state = store.getState();
+    if (!state.isAuthenticated) {
+      addBacklogPaths([filePath]);
+      store.setState({ uploadMessage: `queued while signed out: ${filePath}` });
+      return;
+    }
+
     if (!state.autoSyncNewScreenshots) {
       addBacklogPaths([filePath]);
       store.setState({ uploadMessage: `queued for review: ${filePath}` });
@@ -456,6 +462,7 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
     authMessage: 'signed in',
     signedInUserLabel
   });
+  await refreshBacklogCandidates();
 
   if (store.getState().watcherAutostart && !store.getState().watcherRunning) {
     await startWatcher();
@@ -559,7 +566,7 @@ function render(state: AppState): void {
   signinBtn.hidden = state.isAuthenticated;
   signoutBtn.hidden = !state.isAuthenticated;
   watcherBtn.textContent = state.watcherRunning ? 'Stop watcher' : 'Start watcher';
-  watcherBtn.disabled = !state.isAuthenticated;
+  watcherBtn.disabled = false;
 
   notificationsToggle.checked = state.notificationsEnabled;
   watcherAutostartToggle.checked = state.watcherAutostart;
@@ -647,6 +654,13 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
 function renderRecentUploads(log: Array<{ name: string; path: string; ts: number }>): void {
   recentUploadsEmpty.hidden = log.length > 0;
   recentUploadsList.hidden = log.length === 0;
+  const timestampFormatter = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
 
   recentUploadsList.replaceChildren(
     ...[...log].reverse().map((entry) => {
@@ -659,8 +673,7 @@ function renderRecentUploads(log: Array<{ name: string; path: string; ts: number
 
       const time = document.createElement('span');
       time.className = 'recent-upload-time';
-      const mins = Math.round((Date.now() - entry.ts) / 60000);
-      time.textContent = mins < 1 ? 'just now' : `${mins}m ago`;
+      time.textContent = timestampFormatter.format(new Date(entry.ts));
 
       li.appendChild(name);
       li.appendChild(time);
