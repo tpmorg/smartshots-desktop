@@ -164,7 +164,7 @@ fn get_oauth_redirect_url(app: AppHandle, state: State<'_, SharedState>) -> Resu
         });
     }
 
-    Ok("http://127.0.0.1:38965/auth/callback".to_string())
+    Ok("http://127.0.0.1:38965/auth/callback?platform=desktop&return_to=smartshots%3A%2F%2Fauth%2Fcallback".to_string())
 }
 
 #[tauri::command]

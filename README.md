@@ -163,3 +163,27 @@ Implementation:
 4. `src/uploadHistory.ts`
    - persisted upload/ignore/failure records
    - unprocessed filtering + recent upload retrieval
+
+## Installer Builds
+
+Installer packaging is driven by:
+
+```bash
+npm run tauri:build
+```
+
+Current status:
+1. Frontend build succeeds.
+2. Rust release build succeeds.
+3. macOS app bundle is generated (`Smartshots.app`).
+4. DMG packaging can fail in sandboxed/headless environments due to `hdiutil` restrictions.
+
+Known DMG packaging caveat:
+1. In sandboxed sessions, `hdiutil` may fail with errors like:
+   - `Cannot start hdiejectd because app is sandboxed`
+   - `hdiutil: create failed - Device not configured`
+2. Running the same DMG script outside sandbox succeeds.
+
+Practical guidance:
+1. Treat `.app` generation as the main indicator that app build is healthy.
+2. Run final DMG packaging in a normal macOS user environment (non-sandboxed) for release artifacts.

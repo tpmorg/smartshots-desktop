@@ -5,7 +5,12 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { assertEnv } from './env';
-import { SupabaseService } from './supabaseService';
+import {
+  SupabaseService,
+  type SubscriptionDetails,
+  type SubscriptionFeatureFlags,
+  type SubscriptionStatusResponse
+} from './supabaseService';
 import { createStore } from './store';
 import {
   readPreferences,
@@ -53,6 +58,11 @@ type AppState = {
   hideToTrayOnClose: boolean;
   autoSyncNewScreenshots: boolean;
   reviewBacklogOnLaunch: boolean;
+  subscriptionLoading: boolean;
+  subscriptionError: string;
+  subscriptionEmail: string;
+  subscription: SubscriptionDetails | null;
+  subscriptionFeatures: SubscriptionFeatureFlags | null;
   screenshotDirs: string[];
   processedTotal: number;
   lastSyncTs: number | null;
@@ -89,8 +99,16 @@ const watcherAutostartToggle = document.querySelector<HTMLInputElement>('#watche
 const hideToTrayToggle = document.querySelector<HTMLInputElement>('#hide-to-tray-toggle')!;
 const autoSyncToggle = document.querySelector<HTMLInputElement>('#auto-sync-toggle')!;
 const reviewBacklogToggle = document.querySelector<HTMLInputElement>('#review-backlog-toggle')!;
+const subscriptionSummary = document.querySelector<HTMLParagraphElement>('#subscription-summary')!;
+const subscriptionStatusBadge = document.querySelector<HTMLSpanElement>('#subscription-status-badge')!;
+const subscriptionPlan = document.querySelector<HTMLSpanElement>('#subscription-plan')!;
+const subscriptionUsage = document.querySelector<HTMLSpanElement>('#subscription-usage')!;
+const subscriptionPeriod = document.querySelector<HTMLSpanElement>('#subscription-period')!;
+const subscriptionApiAccess = document.querySelector<HTMLSpanElement>('#subscription-api-access')!;
+const subscriptionNotes = document.querySelector<HTMLDivElement>('#subscription-notes')!;
 const backlogSelectAllBtn = document.querySelector<HTMLButtonElement>('#backlog-select-all-btn')!;
 const backlogClearBtn = document.querySelector<HTMLButtonElement>('#backlog-clear-btn')!;
+const backlogRemoveBtn = document.querySelector<HTMLButtonElement>('#backlog-remove-btn')!;
 const backlogUploadBtn = document.querySelector<HTMLButtonElement>('#backlog-upload-btn')!;
 const websiteBtn = document.querySelector<HTMLButtonElement>('#website-btn')!;
 const quitBtn = document.querySelector<HTMLButtonElement>('#quit-btn')!;
@@ -108,6 +126,13 @@ const passwordSigninInput = document.querySelector<HTMLInputElement>('#password-
 const emailSigninError = document.querySelector<HTMLParagraphElement>('#email-signin-error')!;
 const emailSigninCancelBtn = document.querySelector<HTMLButtonElement>('#email-signin-cancel')!;
 const emailSigninSubmitBtn = document.querySelector<HTMLButtonElement>('#email-signin-submit')!;
+const signInReminderOverlay = document.querySelector<HTMLDivElement>('#signin-reminder-overlay')!;
+const signInReminderCloseBtn = document.querySelector<HTMLButtonElement>('#signin-reminder-close')!;
+const signInReminderSignInBtn = document.querySelector<HTMLButtonElement>('#signin-reminder-signin')!;
+const subscriptionAlertOverlay = document.querySelector<HTMLDivElement>('#subscription-alert-overlay')!;
+const subscriptionAlertText = document.querySelector<HTMLParagraphElement>('#subscription-alert-text')!;
+const subscriptionAlertCloseBtn = document.querySelector<HTMLButtonElement>('#subscription-alert-close')!;
+const subscriptionAlertManageBtn = document.querySelector<HTMLButtonElement>('#subscription-alert-manage')!;
 
 assertEnv();
 
@@ -121,6 +146,10 @@ let backlogRenderToken = 0;
 let pendingIgnorePath: string | null = null;
 const backlogQueuedAt = new Map<string, number>();
 const backlogFileModifiedAt = new Map<string, number>();
+const appSessionId = `app_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+let lastSignInReminderShown = 0;
+let lastSubscriptionAlertKey = '';
+const SIGNIN_REMINDER_COOLDOWN_MS = 30_000;
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const store = createStore<AppState>({
   activeView: 'dashboard',
@@ -137,6 +166,11 @@ const store = createStore<AppState>({
   hideToTrayOnClose: true,
   autoSyncNewScreenshots: true,
   reviewBacklogOnLaunch: true,
+  subscriptionLoading: false,
+  subscriptionError: '',
+  subscriptionEmail: '',
+  subscription: null,
+  subscriptionFeatures: null,
   screenshotDirs: [],
   processedTotal: 0,
   lastSyncTs: null,
@@ -190,6 +224,14 @@ async function init(): Promise<void> {
     authMessage: authed ? 'signed in' : 'signed out',
     signedInUserLabel
   });
+  if (authed) {
+    void refreshSubscriptionStatus('startup');
+  } else {
+    clearSubscriptionState();
+  }
+  if (!authed) {
+    maybeShowSignInReminder('startup');
+  }
 
   if (preferences.watcherAutostart) {
     await startWatcher();
@@ -202,6 +244,8 @@ async function init(): Promise<void> {
         authMessage: 'signed out',
         signedInUserLabel: ''
       });
+      clearSubscriptionState();
+      maybeShowSignInReminder('auth-state');
       return;
     }
 
@@ -212,6 +256,8 @@ async function init(): Promise<void> {
         signedInUserLabel
       });
     });
+    void refreshSubscriptionStatus('auth-change');
+    hideSignInReminder();
     void refreshBacklogCandidates();
 
     if (isAuthenticated && store.getState().watcherAutostart && !store.getState().watcherRunning) {
@@ -229,6 +275,10 @@ async function init(): Promise<void> {
     await handleIncomingAuthUrl(currentUrls[0]);
   }
 
+  window.addEventListener('focus', () => {
+    maybeShowSignInReminder('focus');
+  });
+
   await listen<OAuthCallbackPayload>('oauth-callback-url', async (event) => {
     await handleIncomingAuthUrl(event.payload.url);
   });
@@ -237,14 +287,7 @@ async function init(): Promise<void> {
 }
 
 signinBtn.addEventListener('click', async () => {
-  store.setState({ authMessage: 'opening browser...' });
-
-  try {
-    const redirectTo = await invoke<string>('get_oauth_redirect_url');
-    await supabase.beginOAuthSignInWithRedirect(redirectTo);
-  } catch (error) {
-    store.setState({ authMessage: `failed (${String(error)})` });
-  }
+  await onSignInWithGoogle();
 });
 
 signinEmailBtn.addEventListener('click', () => {
@@ -259,10 +302,23 @@ signoutBtn.addEventListener('click', async () => {
       authMessage: 'signed out',
       signedInUserLabel: ''
     });
+    maybeShowSignInReminder('auth-state');
   } catch (error) {
+    void reportAppError('sign_out_failed', error);
     store.setState({ authMessage: `sign-out failed (${String(error)})` });
   }
 });
+
+async function onSignInWithGoogle(): Promise<void> {
+  store.setState({ authMessage: 'opening browser...' });
+  try {
+    const redirectTo = await invoke<string>('get_oauth_redirect_url');
+    await supabase.beginOAuthSignInWithRedirect(redirectTo);
+  } catch (error) {
+    void reportAppError('sign_in_google_failed', error, { provider: 'google' });
+    store.setState({ authMessage: `failed (${String(error)})` });
+  }
+}
 
 watcherBtn.addEventListener('click', async () => {
   if (store.getState().watcherRunning) {
@@ -330,6 +386,33 @@ backlogSelectAllBtn.addEventListener('click', () => {
 
 backlogClearBtn.addEventListener('click', () => {
   store.setState({ backlogSelected: [] });
+});
+
+backlogRemoveBtn.addEventListener('click', async () => {
+  const selected = [...store.getState().backlogSelected];
+  if (selected.length === 0) {
+    store.setState({ uploadMessage: 'select at least one screenshot' });
+    return;
+  }
+
+  let removedCount = 0;
+  for (const path of selected) {
+    try {
+      await markIgnored(path);
+      removedCount += 1;
+    } catch (error) {
+      void reportAppError('queue_remove_item_failed', error, { filePath: path });
+      console.error('[smartshots] failed to remove selected item', { path, error });
+    }
+  }
+
+  removeBacklogPaths(selected);
+  store.setState({
+    backlogSelected: [],
+    uploadMessage: removedCount > 0
+      ? `removed ${removedCount} screenshot${removedCount === 1 ? '' : 's'} from queue`
+      : 'remove failed'
+  });
 });
 
 backlogUploadBtn.addEventListener('click', async () => {
@@ -446,6 +529,36 @@ emailSigninOverlay.addEventListener('click', (event) => {
   }
 });
 
+signInReminderOverlay.addEventListener('click', (event) => {
+  if (event.target === signInReminderOverlay) {
+    hideSignInReminder();
+  }
+});
+
+signInReminderCloseBtn.addEventListener('click', () => {
+  hideSignInReminder();
+});
+
+signInReminderSignInBtn.addEventListener('click', async () => {
+  hideSignInReminder();
+  await onSignInWithGoogle();
+});
+
+subscriptionAlertOverlay.addEventListener('click', (event) => {
+  if (event.target === subscriptionAlertOverlay) {
+    hideSubscriptionAlert();
+  }
+});
+
+subscriptionAlertCloseBtn.addEventListener('click', () => {
+  hideSubscriptionAlert();
+});
+
+subscriptionAlertManageBtn.addEventListener('click', async () => {
+  hideSubscriptionAlert();
+  await invoke('open_website');
+});
+
 emailSigninSubmitBtn.addEventListener('click', async () => {
   await submitEmailSignin();
 });
@@ -462,6 +575,7 @@ async function handleIgnoreBacklogItem(path: string): Promise<void> {
     const fileName = await basename(path).catch(() => path.split(/[\\/]/).pop() ?? path);
     showIgnoreConfirm(fileName, path);
   } catch (error) {
+    void reportAppError('ignore_preview_failed', error, { filePath: path });
     console.error('[smartshots] failed to ignore', { path, error });
     store.setState({ uploadMessage: `ignore failed (${String(error)})` });
   }
@@ -478,34 +592,40 @@ quitBtn.addEventListener('click', async () => {
 async function listenForScreenshots(): Promise<void> {
   const unlisten = await listen<WatcherEventPayload>('screenshot-created', async (event) => {
     const filePath = event.payload.path;
-    if (shouldSkipUpload(filePath)) {
-      return;
-    }
+    try {
+      if (shouldSkipUpload(filePath)) {
+        return;
+      }
 
-    if (await hasUploaded(filePath)) {
-      store.setState({ uploadMessage: `skipped duplicate: ${filePath}` });
-      return;
-    }
+      if (await hasUploaded(filePath)) {
+        store.setState({ uploadMessage: `skipped duplicate: ${filePath}` });
+        return;
+      }
 
-    if (await hasIgnored(filePath)) {
-      store.setState({ uploadMessage: `skipped ignored screenshot: ${filePath}` });
-      return;
-    }
+      if (await hasIgnored(filePath)) {
+        store.setState({ uploadMessage: `skipped ignored screenshot: ${filePath}` });
+        return;
+      }
 
-    const state = store.getState();
-    if (!state.isAuthenticated) {
-      addBacklogPaths([filePath]);
-      store.setState({ uploadMessage: `queued while signed out: ${filePath}` });
-      return;
-    }
+      const state = store.getState();
+      if (!state.isAuthenticated) {
+        addBacklogPaths([filePath]);
+        store.setState({ uploadMessage: `queued while signed out: ${filePath}` });
+        return;
+      }
 
-    if (!state.autoSyncNewScreenshots) {
-      addBacklogPaths([filePath]);
-      store.setState({ uploadMessage: `queued for review: ${filePath}` });
-      return;
-    }
+      if (!state.autoSyncNewScreenshots) {
+        addBacklogPaths([filePath]);
+        store.setState({ uploadMessage: `queued for review: ${filePath}` });
+        return;
+      }
 
-    await uploadOneScreenshot(filePath, 'watcher');
+      await uploadOneScreenshot(filePath, 'watcher');
+    } catch (error) {
+      void reportAppError('screenshot_event_failed', error, { filePath });
+      console.error('[smartshots] screenshot event failed', { filePath, error });
+      store.setState({ uploadMessage: `screenshot event failed: ${filePath}` });
+    }
   });
 
   window.addEventListener('beforeunload', () => {
@@ -518,7 +638,9 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
 
   const ok = await supabase.handleAuthCallback(url);
   if (!ok) {
+    void reportAppError('auth_callback_failed', null, { callbackUrl: url });
     store.setState({ authMessage: 'callback failed' });
+    maybeShowSignInReminder('auth-state');
     return;
   }
 
@@ -528,7 +650,9 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
     authMessage: 'signed in',
     signedInUserLabel
   });
+  hideSignInReminder();
   await refreshBacklogCandidates();
+  void refreshSubscriptionStatus('sign-in');
 
   if (store.getState().watcherAutostart && !store.getState().watcherRunning) {
     await startWatcher();
@@ -559,6 +683,7 @@ async function confirmIgnoreFromModal(path: string): Promise<void> {
     removeBacklogPaths([path]);
     store.setState({ uploadMessage: `removed from queue: ${fileName}` });
   } catch (error) {
+    void reportAppError('ignore_confirm_failed', error, { filePath: path });
     console.error('[smartshots] failed to ignore', { path, error });
     store.setState({ uploadMessage: `remove failed (${String(error)})` });
   }
@@ -582,6 +707,7 @@ async function startWatcher(): Promise<void> {
     await invoke('start_screenshot_watcher');
     store.setState({ watcherRunning: true, watcherMessage: 'running' });
   } catch (error) {
+    void reportAppError('watcher_start_failed', error);
     store.setState({ watcherMessage: `error (${String(error)})` });
   }
 }
@@ -591,6 +717,7 @@ async function stopWatcher(): Promise<void> {
     await invoke('stop_screenshot_watcher');
     store.setState({ watcherRunning: false, watcherMessage: 'stopped' });
   } catch (error) {
+    void reportAppError('watcher_stop_failed', error);
     store.setState({ watcherMessage: `error (${String(error)})` });
   }
 }
@@ -639,6 +766,7 @@ function render(state: AppState): void {
   hideToTrayToggle.checked = state.hideToTrayOnClose;
   autoSyncToggle.checked = state.autoSyncNewScreenshots;
   reviewBacklogToggle.checked = state.reviewBacklogOnLaunch;
+  renderSubscription(state);
 
   const dirsKey = state.screenshotDirs.join('|');
   if (dirsKey !== lastDirsKey) {
@@ -653,9 +781,94 @@ function render(state: AppState): void {
 
   backlogEmpty.hidden = state.backlogPaths.length > 0;
   backlogList.classList.toggle('backlog-list--scroll', state.backlogPaths.length > 1);
+  backlogRemoveBtn.disabled = state.backlogSelected.length === 0;
   backlogUploadBtn.disabled = state.backlogSelected.length === 0 || !state.isAuthenticated;
   renderRecentUploads(state.recentUploadLog);
   void renderBacklogList(state.backlogPaths, state.backlogSelected);
+}
+
+function renderSubscription(state: AppState): void {
+  const subscription = state.subscription;
+  const features = state.subscriptionFeatures;
+  const status = subscription?.status ?? '';
+  const badgeVariant = getSubscriptionBadgeVariant(status, subscription?.can_upload ?? false);
+  subscriptionStatusBadge.className = `subscription-status-badge subscription-status-badge--${badgeVariant}`;
+
+  if (!state.isAuthenticated) {
+    subscriptionSummary.textContent = 'Sign in to load your plan and upload allowance.';
+    subscriptionStatusBadge.textContent = 'Signed out';
+    subscriptionPlan.textContent = '-';
+    subscriptionUsage.textContent = '-';
+    subscriptionPeriod.textContent = '-';
+    subscriptionApiAccess.textContent = '-';
+    subscriptionNotes.replaceChildren(createSubscriptionNote('Sign in to check subscription details before uploading.', ''));
+    return;
+  }
+
+  if (state.subscriptionLoading && !subscription) {
+    subscriptionSummary.textContent = 'Checking your plan and usage...';
+    subscriptionStatusBadge.textContent = 'Loading';
+    subscriptionPlan.textContent = '-';
+    subscriptionUsage.textContent = '-';
+    subscriptionPeriod.textContent = '-';
+    subscriptionApiAccess.textContent = '-';
+    subscriptionNotes.replaceChildren(createSubscriptionNote('Subscription details are loading.', ''));
+    return;
+  }
+
+  if (state.subscriptionError && !subscription) {
+    subscriptionSummary.textContent = 'We could not load subscription details right now.';
+    subscriptionStatusBadge.textContent = 'Unavailable';
+    subscriptionPlan.textContent = '-';
+    subscriptionUsage.textContent = '-';
+    subscriptionPeriod.textContent = '-';
+    subscriptionApiAccess.textContent = '-';
+    subscriptionNotes.replaceChildren(createSubscriptionNote(state.subscriptionError, 'danger'));
+    return;
+  }
+
+  if (!subscription) {
+    subscriptionSummary.textContent = 'No subscription data is available yet.';
+    subscriptionStatusBadge.textContent = 'Unknown';
+    subscriptionPlan.textContent = '-';
+    subscriptionUsage.textContent = '-';
+    subscriptionPeriod.textContent = '-';
+    subscriptionApiAccess.textContent = '-';
+    subscriptionNotes.replaceChildren();
+    return;
+  }
+
+  subscriptionStatusBadge.textContent = formatSubscriptionStatus(status);
+  subscriptionSummary.textContent = buildSubscriptionSummary(subscription, state.subscriptionEmail);
+  subscriptionPlan.textContent = subscription.plan_name;
+  subscriptionUsage.textContent = subscription.is_unlimited
+    ? `${subscription.screenshots_used} used · unlimited`
+    : `${subscription.screenshots_used}/${subscription.screenshot_limit} used`;
+  subscriptionPeriod.textContent = formatSubscriptionPeriod(subscription);
+  subscriptionApiAccess.textContent = features?.api_access ? 'Enabled' : 'Unavailable';
+
+  const notes: HTMLElement[] = [];
+  notes.push(createSubscriptionNote(`Remaining uploads this period: ${formatRemainingUploads(subscription)}`, ''));
+
+  if (subscription.is_trial && subscription.trial_ends_at) {
+    notes.push(createSubscriptionNote(`Trial ends ${formatDate(subscription.trial_ends_at)}.`, 'warn'));
+  }
+
+  if (subscription.cancel_at_period_end && subscription.current_period_end) {
+    notes.push(createSubscriptionNote(`Cancellation is scheduled for ${formatDate(subscription.current_period_end)}.`, 'warn'));
+  }
+
+  if (!subscription.can_upload) {
+    notes.push(createSubscriptionNote('Uploads are currently blocked for this account until billing is resolved or the plan changes.', 'danger'));
+  } else if (subscription.usage_percentage >= 85 && !subscription.is_unlimited) {
+    notes.push(createSubscriptionNote(`You have used ${subscription.usage_percentage}% of this period's upload allowance.`, 'warn'));
+  }
+
+  if (state.subscriptionError) {
+    notes.push(createSubscriptionNote(`Last refresh issue: ${state.subscriptionError}`, 'warn'));
+  }
+
+  subscriptionNotes.replaceChildren(...notes);
 }
 
 async function renderBacklogList(paths: string[], selectedPaths: string[]): Promise<void> {
@@ -787,6 +1000,15 @@ function guessContentType(path: string): string {
 }
 
 async function uploadOneScreenshot(filePath: string, source: 'watcher' | 'backlog'): Promise<void> {
+  const currentSubscription = store.getState().subscription;
+  if (currentSubscription && !currentSubscription.can_upload) {
+    const blockedMessage = `upload blocked: subscription ${formatSubscriptionStatus(currentSubscription.status).toLowerCase()}`;
+    await markUploadFailure(filePath, blockedMessage);
+    store.setState({ uploadMessage: blockedMessage });
+    maybeShowSubscriptionAlert(currentSubscription);
+    return;
+  }
+
   if (inFlightUploads.has(filePath)) {
     return;
   }
@@ -834,6 +1056,12 @@ async function uploadOneScreenshot(filePath: string, source: 'watcher' | 'backlo
     await markUploadFailure(filePath, message);
     setUploadStatus(seq, `failed (${message})`);
     failUploadProgress(seq);
+    void reportAppError('upload_failed', error, {
+      filePath,
+      source
+    }, {
+      endpoint: '/api/screenshots'
+    });
     console.error('[smartshots] upload failed', { filePath, error, source });
 
     if (store.getState().notificationsEnabled) {
@@ -857,7 +1085,41 @@ async function refreshBacklogCandidates(): Promise<void> {
       store.setState({ uploadMessage: `backlog found: ${unprocessed.length} screenshot(s) pending review` });
     }
   } catch (error) {
+    void reportAppError('backlog_refresh_failed', error);
     console.warn('[smartshots] backlog scan failed', error);
+  }
+}
+
+async function refreshSubscriptionStatus(context: 'startup' | 'auth-change' | 'sign-in' | 'manual'): Promise<void> {
+  if (!store.getState().isAuthenticated) {
+    clearSubscriptionState();
+    return;
+  }
+
+  store.setState({
+    subscriptionLoading: true,
+    subscriptionError: ''
+  });
+
+  try {
+    const response = await supabase.getSubscriptionStatus();
+    applySubscriptionState(response);
+
+    if (isDelinquentSubscription(response.subscription)) {
+      maybeShowSubscriptionAlert(response.subscription);
+    } else {
+      hideSubscriptionAlert();
+      if (context === 'sign-in' || context === 'auth-change') {
+        lastSubscriptionAlertKey = '';
+      }
+    }
+  } catch (error) {
+    const message = toErrorMessage(error);
+    store.setState({
+      subscriptionLoading: false,
+      subscriptionError: message
+    });
+    void reportAppError('subscription_status_failed', error, { context });
   }
 }
 
@@ -955,6 +1217,65 @@ function closeImagePreview(): void {
   imagePreviewImage.src = '';
 }
 
+function hideSignInReminder(): void {
+  signInReminderOverlay.hidden = true;
+}
+
+function hideSubscriptionAlert(): void {
+  subscriptionAlertOverlay.hidden = true;
+}
+
+function maybeShowSignInReminder(context: 'startup' | 'focus' | 'auth-state'): void {
+  if (store.getState().isAuthenticated) {
+    signInReminderOverlay.hidden = true;
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastSignInReminderShown < SIGNIN_REMINDER_COOLDOWN_MS) {
+    return;
+  }
+
+  const isAlreadyVisible = !signInReminderOverlay.hidden;
+  if (isAlreadyVisible) {
+    return;
+  }
+
+  signInReminderOverlay.hidden = false;
+  lastSignInReminderShown = now;
+
+  if (context === 'startup') {
+    console.info('[smartshots] showing sign-in reminder on startup');
+  }
+}
+
+function maybeShowSubscriptionAlert(subscription: SubscriptionDetails): void {
+  if (!isDelinquentSubscription(subscription)) {
+    return;
+  }
+
+  const alertKey = `${subscription.status}:${subscription.current_period_end ?? ''}:${subscription.can_upload}`;
+  if (alertKey === lastSubscriptionAlertKey && !subscriptionAlertOverlay.hidden) {
+    return;
+  }
+
+  lastSubscriptionAlertKey = alertKey;
+  subscriptionAlertText.textContent = buildSubscriptionAlertMessage(subscription);
+  subscriptionAlertOverlay.hidden = false;
+}
+
+function clearSubscriptionState(): void {
+  lastSubscriptionAlertKey = '';
+  hideSubscriptionAlert();
+  store.setState({
+    subscriptionLoading: false,
+    subscriptionError: '',
+    subscriptionEmail: '',
+    subscription: null,
+    subscriptionFeatures: null
+  });
+}
+
 function showEmailSigninModal(): void {
   emailSigninError.hidden = true;
   emailSigninError.textContent = 'Invalid email or password.';
@@ -988,8 +1309,10 @@ async function submitEmailSignin(): Promise<void> {
   try {
     await supabase.signInWithPassword(email, password);
     hideEmailSigninModal();
+    hideSignInReminder();
     store.setState({ authMessage: 'signed in' });
   } catch (error) {
+    void reportAppError('sign_in_email_failed', error, { email });
     const message = error instanceof Error ? error.message : String(error);
     emailSigninError.textContent = message || 'Sign-in failed.';
     emailSigninError.hidden = false;
@@ -1010,7 +1333,61 @@ function formatLastSync(ts: number): string {
   return `${month}/${day}/${year} ${hour12}:${minutes}${meridiem}`;
 }
 
-void init();
+function reportAppError(
+  eventName: string,
+  error: unknown,
+  eventData?: Record<string, unknown>,
+  metadata?: Record<string, unknown>
+): void {
+  const errorInfo = serializeError(error);
+  void supabase.logAppError({
+    eventType: 'error',
+    eventName,
+    eventData: {
+      ...errorInfo,
+      ...eventData
+    },
+    metadata: {
+      app_session_id: appSessionId,
+      active_view: store.getState().activeView,
+      is_authenticated: store.getState().isAuthenticated,
+      ...metadata
+    }
+  });
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      error_name: error.name,
+      error_message: error.message,
+      error_stack: error.stack ?? ''
+    };
+  }
+
+  return {
+    error_message: String(error)
+  };
+}
+
+void init().catch((error) => {
+  reportAppError('init_failed', error);
+  console.error('[smartshots] init failed', error);
+});
+
+window.addEventListener('error', (event) => {
+  void reportAppError('window_error', event.error ?? event.message, {
+    filename: event.filename,
+    lineno: event.lineno,
+    colno: event.colno
+  });
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  void reportAppError('unhandled_rejection', event.reason, {
+    reasonType: typeof event.reason
+  });
+});
 
 function beginUploadProgress(seq: number): void {
   clearUploadProgressTimer();
@@ -1104,4 +1481,117 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function applySubscriptionState(response: SubscriptionStatusResponse): void {
+  store.setState({
+    subscriptionLoading: false,
+    subscriptionError: '',
+    subscriptionEmail: response.email ?? '',
+    subscription: response.subscription,
+    subscriptionFeatures: response.features
+  });
+}
+
+function isDelinquentSubscription(subscription: SubscriptionDetails): boolean {
+  const status = subscription.status.toLowerCase();
+  return !subscription.can_upload || ['delinquent', 'past_due', 'unpaid', 'expired', 'incomplete_expired'].includes(status);
+}
+
+function formatSubscriptionStatus(status: string): string {
+  if (!status) {
+    return 'Unknown';
+  }
+
+  return status
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function getSubscriptionBadgeVariant(status: string, canUpload: boolean): 'neutral' | 'ok' | 'warn' | 'danger' {
+  if (!status) {
+    return 'neutral';
+  }
+
+  const normalized = status.toLowerCase();
+  if (!canUpload || ['expired', 'delinquent', 'unpaid', 'incomplete_expired'].includes(normalized)) {
+    return 'danger';
+  }
+
+  if (['past_due', 'trialing', 'trial', 'canceled'].includes(normalized)) {
+    return 'warn';
+  }
+
+  if (['active', 'admin'].includes(normalized)) {
+    return 'ok';
+  }
+
+  return 'neutral';
+}
+
+function buildSubscriptionSummary(subscription: SubscriptionDetails, email: string): string {
+  const parts = [formatSubscriptionStatus(subscription.status)];
+  if (email) {
+    parts.push(email);
+  }
+  if (subscription.is_trial) {
+    parts.push('trial');
+  }
+  return parts.join(' · ');
+}
+
+function formatSubscriptionPeriod(subscription: SubscriptionDetails): string {
+  if (subscription.current_period_start && subscription.current_period_end) {
+    return `${formatDate(subscription.current_period_start)} - ${formatDate(subscription.current_period_end)}`;
+  }
+
+  if (subscription.current_period_end) {
+    return `Ends ${formatDate(subscription.current_period_end)}`;
+  }
+
+  if (subscription.billing_cycle) {
+    return formatSubscriptionStatus(subscription.billing_cycle);
+  }
+
+  return '-';
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  }).format(date);
+}
+
+function formatRemainingUploads(subscription: SubscriptionDetails): string {
+  if (subscription.is_unlimited) {
+    return 'Unlimited';
+  }
+
+  return String(Math.max(0, subscription.screenshots_remaining));
+}
+
+function createSubscriptionNote(text: string, tone: '' | 'warn' | 'danger'): HTMLParagraphElement {
+  const note = document.createElement('p');
+  note.className = tone ? `subscription-note subscription-note--${tone}` : 'subscription-note';
+  note.textContent = text;
+  return note;
+}
+
+function buildSubscriptionAlertMessage(subscription: SubscriptionDetails): string {
+  const statusLabel = formatSubscriptionStatus(subscription.status).toLowerCase();
+
+  if (subscription.current_period_end) {
+    return `${subscription.plan_name} is ${statusLabel}. Uploads may be blocked until billing is resolved. Current period ends ${formatDate(subscription.current_period_end)}.`;
+  }
+
+  return `${subscription.plan_name} is ${statusLabel}. Uploads may be blocked until billing is resolved.`;
 }

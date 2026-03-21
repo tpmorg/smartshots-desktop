@@ -23,8 +23,12 @@
     {
       "identifier": "http:allow-fetch",
       "allow": [
+        "https://www.smartshotsai.com/api/logs",
+        "https://www.smartshotsai.com/api/logs/*",
         "https://www.smartshotsai.com/api/screenshots",
-        "https://www.smartshotsai.com/api/screenshots/*"
+        "https://www.smartshotsai.com/api/screenshots/*",
+        "https://www.smartshotsai.com/api/subscription/status",
+        "https://www.smartshotsai.com/api/subscription/status/*"
       ]
     },
     "dialog:default",

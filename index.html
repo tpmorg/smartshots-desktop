@@ -88,6 +88,7 @@
               <div class="mini-actions">
                 <button id="backlog-select-all-btn" class="secondary">Select all</button>
                 <button id="backlog-clear-btn" class="secondary">Clear</button>
+                <button id="backlog-remove-btn" class="secondary">Remove selected</button>
                 <button id="backlog-upload-btn">Upload selected</button>
               </div>
             </div>
@@ -112,6 +113,35 @@
         </section>
 
         <section id="view-settings" class="view" hidden>
+          <section class="subscription-panel">
+            <div class="section-row subscription-panel__header">
+              <div>
+                <p class="section-title">Subscription</p>
+                <p id="subscription-summary" class="subscription-summary">Checking your plan...</p>
+              </div>
+              <span id="subscription-status-badge" class="subscription-status-badge subscription-status-badge--neutral">Loading</span>
+            </div>
+            <div class="subscription-grid">
+              <div class="subscription-metric">
+                <span class="subscription-metric__label">Plan</span>
+                <strong id="subscription-plan">-</strong>
+              </div>
+              <div class="subscription-metric">
+                <span class="subscription-metric__label">Uploads</span>
+                <strong id="subscription-usage">-</strong>
+              </div>
+              <div class="subscription-metric">
+                <span class="subscription-metric__label">Billing period</span>
+                <strong id="subscription-period">-</strong>
+              </div>
+              <div class="subscription-metric">
+                <span class="subscription-metric__label">API access</span>
+                <strong id="subscription-api-access">-</strong>
+              </div>
+            </div>
+            <div id="subscription-notes" class="subscription-notes"></div>
+          </section>
+
           <section class="settings-panel">
             <p class="section-title">Preferences</p>
             <div class="settings-list">
@@ -222,6 +252,28 @@
             <div class="confirm-modal__actions">
               <button id="email-signin-cancel" class="secondary" type="button">Cancel</button>
               <button id="email-signin-submit" type="button">Sign in</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="signin-reminder-overlay" class="confirm-overlay" hidden>
+          <div class="confirm-modal">
+            <p class="confirm-modal__title">Sign in required</p>
+            <p class="confirm-modal__text">You are currently signed out. Sign in to sync screenshots and backlog uploads.</p>
+            <div class="confirm-modal__actions">
+              <button id="signin-reminder-close" class="secondary" type="button">Maybe later</button>
+              <button id="signin-reminder-signin" type="button">Sign in</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="subscription-alert-overlay" class="confirm-overlay" hidden>
+          <div class="confirm-modal">
+            <p class="confirm-modal__title">Subscription attention needed</p>
+            <p id="subscription-alert-text" class="confirm-modal__text">Your subscription needs attention before uploads can continue.</p>
+            <div class="confirm-modal__actions">
+              <button id="subscription-alert-close" class="secondary" type="button">Dismiss</button>
+              <button id="subscription-alert-manage" type="button">Manage subscription</button>
             </div>
           </div>
         </div>

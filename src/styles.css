@@ -702,6 +702,118 @@ button:disabled {
   padding: 14px;
 }
 
+.subscription-panel {
+  border: 1px solid #4e6688;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at top right, rgba(128, 215, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(23, 42, 68, 0.96), rgba(14, 28, 47, 0.95));
+  padding: 14px;
+}
+
+.subscription-panel__header {
+  align-items: flex-start;
+}
+
+.subscription-summary {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.subscription-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.subscription-status-badge--neutral {
+  border-color: #5f7190;
+  background: rgba(95, 113, 144, 0.16);
+  color: #d8e7ff;
+}
+
+.subscription-status-badge--ok {
+  border-color: #4d9a87;
+  background: rgba(84, 204, 171, 0.16);
+  color: #b8ffe4;
+}
+
+.subscription-status-badge--warn {
+  border-color: #d5964b;
+  background: rgba(255, 191, 105, 0.16);
+  color: #ffe0ad;
+}
+
+.subscription-status-badge--danger {
+  border-color: #b96666;
+  background: rgba(255, 120, 120, 0.16);
+  color: #ffd1d1;
+}
+
+.subscription-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.subscription-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 9px;
+  border: 1px solid #40608e;
+  background: rgba(21, 39, 63, 0.72);
+}
+
+.subscription-metric__label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subscription-metric strong {
+  font-size: 14px;
+  color: #f2f7ff;
+}
+
+.subscription-notes {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.subscription-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #3e608d;
+  background: rgba(20, 36, 57, 0.78);
+  color: #dce8fa;
+  font-size: 12px;
+}
+
+.subscription-note--warn {
+  border-color: #a98242;
+  background: rgba(80, 55, 19, 0.45);
+  color: #ffe0ad;
+}
+
+.subscription-note--danger {
+  border-color: #a55d5d;
+  background: rgba(84, 31, 31, 0.44);
+  color: #ffd3d3;
+}
+
 .settings-list {
   margin-top: 12px;
   display: grid;
@@ -854,6 +966,12 @@ button:disabled {
   border: 1px solid #446591;
   border-radius: 6px;
   background: #071427;
+}
+
+@media (max-width: 640px) {
+  .subscription-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .toggle-switch {

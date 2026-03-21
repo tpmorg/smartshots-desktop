@@ -18,6 +18,57 @@ export type UploadResult = {
   contentType: string;
   sizeBytes: number;
 };
+export type SubscriptionPlanTier = 'free' | 'starter' | 'pro' | 'power' | 'admin';
+export type SubscriptionFeatureFlags = {
+  max_screenshots: number;
+  ai_analysis: boolean;
+  chrome_extension: boolean;
+  collections: boolean;
+  tags: boolean;
+  advanced_search: boolean;
+  api_access: boolean;
+  priority_support: boolean;
+  unlimited_collections: boolean;
+};
+export type SubscriptionDetails = {
+  plan_tier: SubscriptionPlanTier;
+  plan_name: string;
+  status: string;
+  screenshot_limit: number;
+  screenshots_used: number;
+  screenshots_remaining: number;
+  is_unlimited: boolean;
+  can_upload: boolean;
+  usage_percentage: number;
+  billing_cycle: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  is_trial: boolean;
+  trial_ends_at: string | null;
+  cancel_at_period_end: boolean;
+  has_stripe_subscription: boolean;
+};
+export type SubscriptionAccountDetails = {
+  created_at: string | null;
+  email_confirmed: boolean;
+  last_sign_in: string | null;
+};
+export type SubscriptionStatusResponse = {
+  success: true;
+  user_id: string;
+  email: string | null;
+  subscription: SubscriptionDetails;
+  features: SubscriptionFeatureFlags;
+  account: SubscriptionAccountDetails;
+};
+
+export type AppErrorLogArgs = {
+  eventType?: string;
+  eventName: string;
+  eventData?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  sessionId?: string;
+};
 
 const MIN_COMPRESSION_GAIN = 0.03;
 const WEBP_ATTEMPTS = [
@@ -118,14 +169,30 @@ export class SupabaseService {
     try {
       const callbackUrl = new URL(url);
       const code = callbackUrl.searchParams.get('code');
+      const accessTokenFromQuery = callbackUrl.searchParams.get('access_token');
+      const refreshTokenFromQuery = callbackUrl.searchParams.get('refresh_token') ?? '';
 
       if (code) {
         const { error } = await this.supabase.auth.exchangeCodeForSession(code);
         return !error;
       }
 
+      const queryTokenParams = new URLSearchParams();
+      if (accessTokenFromQuery) {
+        queryTokenParams.set('access_token', accessTokenFromQuery);
+      }
+      if (refreshTokenFromQuery) {
+        queryTokenParams.set('refresh_token', refreshTokenFromQuery);
+      }
+
       const fragment = callbackUrl.hash.replace(/^#/, '');
-      const params = new URLSearchParams(fragment);
+      const params = fragment ? new URLSearchParams(fragment) : queryTokenParams;
+      if (!params.has('access_token') && queryTokenParams.has('access_token')) {
+        params.set('access_token', queryTokenParams.get('access_token') ?? '');
+      }
+      if (!params.has('refresh_token') && queryTokenParams.has('refresh_token')) {
+        params.set('refresh_token', queryTokenParams.get('refresh_token') ?? '');
+      }
 
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token') ?? '';
@@ -150,6 +217,37 @@ export class SupabaseService {
     if (error) {
       throw error;
     }
+  }
+
+  async logAppError(args: AppErrorLogArgs): Promise<boolean> {
+    const accessToken = await this.getValidAccessToken();
+    if (!accessToken) {
+      return false;
+    }
+
+    if (!args.eventName) {
+      return false;
+    }
+
+    const response = await this.sendLog({
+      accessToken,
+      payload: {
+        platform: getUploadSource(),
+        event_type: args.eventType || 'error',
+        event_name: args.eventName,
+        event_data: args.eventData || {},
+        metadata: args.metadata || {},
+        session_id: args.sessionId
+      }
+    });
+
+    if (!response.ok) {
+      const body = await safeReadBody(response);
+      console.warn('[smartshots] failed to send app error log', response.status, body);
+      return false;
+    }
+
+    return true;
   }
 
   async uploadScreenshot(filePath: string): Promise<UploadResult> {
@@ -220,6 +318,37 @@ export class SupabaseService {
     };
   }
 
+  async getSubscriptionStatus(): Promise<SubscriptionStatusResponse> {
+    const accessToken = await this.getValidAccessToken();
+    if (!accessToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await this.fetchSubscriptionStatus(accessToken);
+    if (response.status === 401 || response.status === 403) {
+      const refreshedToken = await this.refreshAccessToken();
+      if (!refreshedToken) {
+        const body = await safeReadBody(response);
+        throw new Error(`Subscription status failed (${response.status}): ${body}`);
+      }
+
+      const retryResponse = await this.fetchSubscriptionStatus(refreshedToken);
+      if (!retryResponse.ok) {
+        const body = await safeReadBody(retryResponse);
+        throw new Error(`Subscription status failed (${retryResponse.status}): ${body}`);
+      }
+
+      return retryResponse.json();
+    }
+
+    if (!response.ok) {
+      const body = await safeReadBody(response);
+      throw new Error(`Subscription status failed (${response.status}): ${body}`);
+    }
+
+    return response.json();
+  }
+
   private async getValidAccessToken(): Promise<string | null> {
     const { data } = await this.supabase.auth.getSession();
     const session = data.session;
@@ -284,6 +413,38 @@ export class SupabaseService {
         Accept: 'application/json'
       },
       body: formData
+    });
+  }
+
+  private async sendLog(args: {
+    accessToken: string;
+    payload: {
+      platform: ReturnType<typeof getUploadSource> | 'web' | 'mobile' | 'chrome_extension' | 'windows_app';
+      event_type: string;
+      event_name: string;
+      event_data?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      session_id?: string;
+    };
+  }): Promise<Response> {
+    return nativeFetch(`${config.apiBaseUrl}/api/logs`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.accessToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify(args.payload)
+    });
+  }
+
+  private async fetchSubscriptionStatus(accessToken: string): Promise<Response> {
+    return nativeFetch(`${config.apiBaseUrl}/api/subscription/status`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json'
+      }
     });
   }
 }
