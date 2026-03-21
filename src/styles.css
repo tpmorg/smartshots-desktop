@@ -398,6 +398,50 @@ body {
   font-size: 11px;
 }
 
+.action-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.action-help__trigger {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #5476a5;
+  background: rgba(24, 49, 84, 0.92);
+  color: #cfe1ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.action-help__tooltip {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #4c688f;
+  background: rgba(10, 21, 39, 0.98);
+  color: #e8f1ff;
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 5;
+}
+
+.action-help:hover .action-help__tooltip,
+.action-help:focus-within .action-help__tooltip {
+  opacity: 1;
+}
+
 .backlog-actions input[type='checkbox'] {
   width: 18px;
   height: 18px;
