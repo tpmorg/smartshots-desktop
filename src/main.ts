@@ -45,6 +45,7 @@ type AppView = 'dashboard' | 'settings';
 
 type AppState = {
   activeView: AppView;
+  authChecked: boolean;
   isAuthenticated: boolean;
   authMessage: string;
   signedInUserLabel: string;
@@ -153,6 +154,7 @@ const SIGNIN_REMINDER_COOLDOWN_MS = 30_000;
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const store = createStore<AppState>({
   activeView: 'dashboard',
+  authChecked: false,
   isAuthenticated: false,
   authMessage: 'checking...',
   signedInUserLabel: '',
@@ -220,11 +222,13 @@ async function init(): Promise<void> {
   const authed = await supabase.isAuthenticated();
   const signedInUserLabel = authed ? await getSignedInUserLabel() : '';
   store.setState({
+    authChecked: true,
     isAuthenticated: authed,
     authMessage: authed ? 'signed in' : 'signed out',
     signedInUserLabel
   });
   if (authed) {
+    hideSignInReminder();
     void refreshSubscriptionStatus('startup');
   } else {
     clearSubscriptionState();
@@ -240,6 +244,7 @@ async function init(): Promise<void> {
   supabase.onAuthenticationStateChanged((isAuthenticated) => {
     if (!isAuthenticated) {
       store.setState({
+        authChecked: true,
         isAuthenticated: false,
         authMessage: 'signed out',
         signedInUserLabel: ''
@@ -251,6 +256,7 @@ async function init(): Promise<void> {
 
     void refreshSignedInUserIdentity().then((signedInUserLabel) => {
       store.setState({
+        authChecked: true,
         isAuthenticated: true,
         authMessage: 'signed in',
         signedInUserLabel
@@ -298,6 +304,7 @@ signoutBtn.addEventListener('click', async () => {
   try {
     await supabase.signOut();
     store.setState({
+      authChecked: true,
       isAuthenticated: false,
       authMessage: 'signed out',
       signedInUserLabel: ''
@@ -646,6 +653,7 @@ async function handleIncomingAuthUrl(url: string | undefined): Promise<void> {
 
   const signedInUserLabel = await getSignedInUserLabel();
   store.setState({
+    authChecked: true,
     isAuthenticated: true,
     authMessage: 'signed in',
     signedInUserLabel
@@ -1243,6 +1251,10 @@ function hideSubscriptionAlert(): void {
 }
 
 function maybeShowSignInReminder(context: 'startup' | 'focus' | 'auth-state'): void {
+  if (!store.getState().authChecked) {
+    return;
+  }
+
   if (store.getState().isAuthenticated) {
     signInReminderOverlay.hidden = true;
     return;
