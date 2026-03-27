@@ -187,3 +187,24 @@ Known DMG packaging caveat:
 Practical guidance:
 1. Treat `.app` generation as the main indicator that app build is healthy.
 2. Run final DMG packaging in a normal macOS user environment (non-sandboxed) for release artifacts.
+
+## GitHub Actions Builds
+
+The repo includes a GitHub Actions workflow at [`.github/workflows/build-installers.yml`](/Users/timmorgan/Development/desktop/smartshots-desktop/.github/workflows/build-installers.yml) that builds both Windows installers and a macOS DMG.
+
+macOS artifact output:
+1. `src-tauri/target/release/bundle/dmg/*.dmg`
+2. uploaded to Actions as artifact `macos-dmg`
+
+Required GitHub repository secrets:
+1. `VITE_SUPABASE_URL`
+2. `VITE_SUPABASE_ANON_KEY`
+
+Optional GitHub repository variables:
+1. `VITE_SUPABASE_BUCKET`
+2. `VITE_API_BASE_URL`
+3. `VITE_OAUTH_REDIRECT`
+
+Trigger options:
+1. Push to a branch whose name matches `*release*`
+2. Run manually with `workflow_dispatch`
