@@ -200,6 +200,15 @@ Required GitHub repository secrets:
 1. `VITE_SUPABASE_URL`
 2. `VITE_SUPABASE_ANON_KEY`
 
+Additional macOS signing/notarization secrets:
+1. `APPLE_CERTIFICATE`
+2. `APPLE_CERTIFICATE_PASSWORD`
+3. `APPLE_SIGNING_IDENTITY`
+4. `KEYCHAIN_PASSWORD`
+5. `APPLE_ID`
+6. `APPLE_PASSWORD`
+7. `APPLE_TEAM_ID`
+
 Optional GitHub repository variables:
 1. `VITE_SUPABASE_BUCKET`
 2. `VITE_API_BASE_URL`
