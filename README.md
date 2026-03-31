@@ -172,6 +172,12 @@ Installer packaging is driven by:
 npm run tauri:build
 ```
 
+For a local signed/notarized macOS release build:
+
+```bash
+npm run release:mac
+```
+
 Local build outputs:
 1. Windows: installer bundles under `src-tauri/target/release/bundle/`
 2. macOS: `.app` bundle, `.dmg`, and updater archive outputs under `src-tauri/target/release/bundle/`
@@ -180,6 +186,35 @@ Practical guidance:
 1. `npm run tauri:build` is the local packaging entrypoint for both platforms.
 2. macOS distribution builds intended for other users should be signed and notarized.
 3. Unsigned or non-notarized macOS builds may open locally for development, but can be blocked by Gatekeeper when downloaded on another Mac.
+4. `npm run release:mac` is the recommended local path for Mac release builds when the signing certificate is already installed in your login Keychain.
+
+### Local macOS Release Setup
+
+The local release script at [`scripts/build-macos-release.sh`](/Users/timmorgan/Development/desktop/smartshots-desktop/scripts/build-macos-release.sh) assumes:
+1. you are running on macOS
+2. your `Developer ID Application` certificate is already installed in Keychain Access
+3. the environment variables below are available in your shell or in ignored local env files
+
+The script automatically loads these ignored files when present:
+1. [`.env.local`](/Users/timmorgan/Development/desktop/smartshots-desktop/.env.local)
+2. `.env.release.local`
+
+Required local environment variables:
+1. `VITE_SUPABASE_URL`
+2. `VITE_SUPABASE_ANON_KEY`
+3. `APPLE_SIGNING_IDENTITY`
+4. `APPLE_ID`
+5. `APPLE_PASSWORD`
+6. `APPLE_TEAM_ID`
+
+Suggested use:
+1. Put app config in [`.env.local`](/Users/timmorgan/Development/desktop/smartshots-desktop/.env.local)
+2. Put release-only Apple values in `.env.release.local`
+3. Run `npm run release:mac`
+
+Notes:
+1. `APPLE_PASSWORD` must be an app-specific password from `appleid.apple.com`
+2. The script validates that the signing identity exists in your local keychain before starting the Tauri build
 
 ## GitHub Actions Builds
 
