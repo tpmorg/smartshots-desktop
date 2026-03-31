@@ -172,29 +172,26 @@ Installer packaging is driven by:
 npm run tauri:build
 ```
 
-Current status:
-1. Frontend build succeeds.
-2. Rust release build succeeds.
-3. macOS app bundle is generated (`Smartshots.app`).
-4. DMG packaging can fail in sandboxed/headless environments due to `hdiutil` restrictions.
-
-Known DMG packaging caveat:
-1. In sandboxed sessions, `hdiutil` may fail with errors like:
-   - `Cannot start hdiejectd because app is sandboxed`
-   - `hdiutil: create failed - Device not configured`
-2. Running the same DMG script outside sandbox succeeds.
+Local build outputs:
+1. Windows: installer bundles under `src-tauri/target/release/bundle/`
+2. macOS: `.app` bundle, `.dmg`, and updater archive outputs under `src-tauri/target/release/bundle/`
 
 Practical guidance:
-1. Treat `.app` generation as the main indicator that app build is healthy.
-2. Run final DMG packaging in a normal macOS user environment (non-sandboxed) for release artifacts.
+1. `npm run tauri:build` is the local packaging entrypoint for both platforms.
+2. macOS distribution builds intended for other users should be signed and notarized.
+3. Unsigned or non-notarized macOS builds may open locally for development, but can be blocked by Gatekeeper when downloaded on another Mac.
 
 ## GitHub Actions Builds
 
 The repo includes a GitHub Actions workflow at [`.github/workflows/build-installers.yml`](/Users/timmorgan/Development/desktop/smartshots-desktop/.github/workflows/build-installers.yml) that builds both Windows installers and a macOS DMG.
 
-macOS artifact output:
+Artifact outputs:
+1. Windows artifact `windows-build`
+2. macOS artifact `macos-dmg`
+
+macOS files uploaded from the runner:
 1. `src-tauri/target/release/bundle/dmg/*.dmg`
-2. uploaded to Actions as artifact `macos-dmg`
+2. `src-tauri/target/release/bundle/macos/*.app.tar.gz`
 
 Required GitHub repository secrets:
 1. `VITE_SUPABASE_URL`
@@ -202,12 +199,19 @@ Required GitHub repository secrets:
 
 Additional macOS signing/notarization secrets:
 1. `APPLE_CERTIFICATE`
+   Base64-encoded exported `.p12` for the `Developer ID Application` certificate
 2. `APPLE_CERTIFICATE_PASSWORD`
+   Password used when exporting the `.p12`
 3. `APPLE_SIGNING_IDENTITY`
+   Full signing identity string, typically `Developer ID Application: Name (TEAMID)`
 4. `KEYCHAIN_PASSWORD`
+   Throwaway password used by GitHub Actions for the temporary build keychain
 5. `APPLE_ID`
+   Apple Account email used for notarization
 6. `APPLE_PASSWORD`
+   App-specific password from `appleid.apple.com`, not the normal Apple Account password
 7. `APPLE_TEAM_ID`
+   Apple Developer Team ID associated with the signing identity and notarization account
 
 Optional GitHub repository variables:
 1. `VITE_SUPABASE_BUCKET`
@@ -217,3 +221,7 @@ Optional GitHub repository variables:
 Trigger options:
 1. Push to a branch whose name matches `*release*`
 2. Run manually with `workflow_dispatch`
+
+Notes:
+1. GitHub Actions artifacts are downloaded as a zip container even when the macOS installer inside is a `.dmg`.
+2. A notarization failure with `HTTP status code: 401` usually means one of `APPLE_ID`, `APPLE_PASSWORD`, or `APPLE_TEAM_ID` does not match. The password must be an app-specific password.
