@@ -353,8 +353,8 @@ fn create_tray(app: &AppHandle) -> Result<(), tauri::Error> {
     let menu = Menu::with_items(app, &[&settings, &website, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
-        .icon(tauri::include_image!("icons/icon.png"))
-        .icon_as_template(true)
+        .icon(tauri::include_image!("icons/32x32.png"))
+        .icon_as_template(false)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| {
