@@ -1,7 +1,7 @@
 :root {
   color-scheme: light;
-  --bg-0: #f4f7ff;
-  --bg-1: #eef3ff;
+  --bg-0: #dfe8ff;
+  --bg-1: #edf3ff;
   --panel: #ffffff;
   --panel-soft: #f8faff;
   --card: #ffffff;
@@ -217,7 +217,7 @@ body {
   overflow-y: auto;
   height: 100vh;
   scrollbar-gutter: stable;
-  background: linear-gradient(180deg, #f7f9ff 0%, #eef3ff 100%);
+  background: linear-gradient(180deg, #f8fbff 0%, var(--bg-1) 100%);
 }
 
 .view {

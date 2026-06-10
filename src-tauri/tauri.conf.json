@@ -20,7 +20,7 @@
         "minHeight": 520,
         "decorations": true,
         "transparent": false,
-        "theme": "Dark",
+        "theme": "Light",
         "hiddenTitle": true,
         "acceptFirstMouse": true,
         "visible": true
