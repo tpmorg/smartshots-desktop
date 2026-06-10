@@ -164,6 +164,18 @@ Implementation:
    - persisted upload/ignore/failure records
    - unprocessed filtering + recent upload retrieval
 
+## Icons
+
+Generate the full icon set from a source image (PNG or SVG):
+
+```bash
+npx tauri icon src/assets/smartshots-logo.png
+```
+
+This creates `icon.icns` (macOS app), `icon.ico` (Windows), and various PNG sizes in `src-tauri/icons/`.
+
+Tray icon: the app uses `icons/32x32.png` for the menu bar. Update `main.rs` to change this.
+
 ## Installer Builds
 
 Installer packaging is driven by:

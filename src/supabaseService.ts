@@ -419,7 +419,7 @@ export class SupabaseService {
   private async sendLog(args: {
     accessToken: string;
     payload: {
-      platform: ReturnType<typeof getUploadSource> | 'web' | 'mobile' | 'chrome_extension' | 'windows_app';
+      platform: ReturnType<typeof getUploadSource>;
       event_type: string;
       event_name: string;
       event_data?: Record<string, unknown>;

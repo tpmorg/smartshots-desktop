@@ -929,29 +929,12 @@ async function renderBacklogList(paths: string[], selectedPaths: string[]): Prom
       ignoreBtn.dataset.path = path;
       ignoreBtn.textContent = 'Remove';
 
-      const removeHelp = document.createElement('div');
-      removeHelp.className = 'action-help';
-
-      const removeHelpButton = document.createElement('button');
-      removeHelpButton.type = 'button';
-      removeHelpButton.className = 'action-help__trigger';
-      removeHelpButton.setAttribute('aria-label', 'Removing only takes this image out of the Smartshots queue');
-      removeHelpButton.textContent = 'i';
-
-      const removeHelpTooltip = document.createElement('span');
-      removeHelpTooltip.className = 'action-help__tooltip';
-      removeHelpTooltip.textContent = 'Removes this image from the Smartshots queue only. The file stays on your computer.';
-
-      removeHelp.appendChild(removeHelpButton);
-      removeHelp.appendChild(removeHelpTooltip);
-
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.dataset.path = path;
       checkbox.checked = selectedSet.has(path);
 
       actions.appendChild(ignoreBtn);
-      actions.appendChild(removeHelp);
       actions.appendChild(checkbox);
 
       li.appendChild(img);
