@@ -206,13 +206,13 @@ Practical guidance:
 
 ### Local macOS Release Setup
 
-The local release script at [`scripts/build-macos-release.sh`](/Users/timmorgan/Development/desktop/smartshots-desktop/scripts/build-macos-release.sh) assumes:
+The local release script at [`scripts/build-macos-release.sh`](scripts/build-macos-release.sh) assumes:
 1. you are running on macOS
 2. your `Developer ID Application` certificate is already installed in Keychain Access
 3. the environment variables below are available in your shell or in ignored local env files
 
 The script automatically loads these ignored files when present:
-1. [`.env.local`](/Users/timmorgan/Development/desktop/smartshots-desktop/.env.local)
+1. `.env.local`
 2. `.env.release.local`
 
 Required local environment variables:
@@ -224,7 +224,7 @@ Required local environment variables:
 6. `APPLE_TEAM_ID`
 
 Suggested use:
-1. Put app config in [`.env.local`](/Users/timmorgan/Development/desktop/smartshots-desktop/.env.local)
+1. Put app config in `.env.local`
 2. Put release-only Apple values in `.env.release.local`
 3. Run `npm run release:mac`
 
@@ -234,7 +234,7 @@ Notes:
 
 ## GitHub Actions Builds
 
-The repo includes a GitHub Actions workflow at [`.github/workflows/build-installers.yml`](/Users/timmorgan/Development/desktop/smartshots-desktop/.github/workflows/build-installers.yml) that builds both Windows installers and a macOS DMG.
+The repo includes a GitHub Actions workflow at [`.github/workflows/build-installers.yml`](.github/workflows/build-installers.yml) that builds both Windows installers and a macOS DMG.
 
 Artifact outputs:
 1. Windows artifact `windows-build`
