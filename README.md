@@ -2,6 +2,10 @@
 
 Smartshots Desktop is a cross-platform tray app (macOS + Windows) for syncing screenshots to Smartshots.
 
+<p align="center">
+  <img src="./desktop-shot.png" alt="Smartshots Desktop app screenshot" width="760" style="max-width: 100%; border-radius: 12px;" />
+</p>
+
 Core flow:
 1. Sign in with Google via Supabase OAuth.
 2. Monitor default screenshot folders.
