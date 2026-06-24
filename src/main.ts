@@ -134,6 +134,10 @@ const subscriptionAlertOverlay = document.querySelector<HTMLDivElement>('#subscr
 const subscriptionAlertText = document.querySelector<HTMLParagraphElement>('#subscription-alert-text')!;
 const subscriptionAlertCloseBtn = document.querySelector<HTMLButtonElement>('#subscription-alert-close')!;
 const subscriptionAlertManageBtn = document.querySelector<HTMLButtonElement>('#subscription-alert-manage')!;
+const syncFailureOverlay = document.querySelector<HTMLDivElement>('#sync-failure-overlay')!;
+const syncFailureText = document.querySelector<HTMLParagraphElement>('#sync-failure-text')!;
+const syncFailureDismissBtn = document.querySelector<HTMLButtonElement>('#sync-failure-dismiss')!;
+const syncFailureSignInBtn = document.querySelector<HTMLButtonElement>('#sync-failure-signin')!;
 
 assertEnv();
 
@@ -564,6 +568,21 @@ subscriptionAlertCloseBtn.addEventListener('click', () => {
 subscriptionAlertManageBtn.addEventListener('click', async () => {
   hideSubscriptionAlert();
   await invoke('open_website');
+});
+
+syncFailureOverlay.addEventListener('click', (event) => {
+  if (event.target === syncFailureOverlay) {
+    hideSyncFailureAlert();
+  }
+});
+
+syncFailureDismissBtn.addEventListener('click', () => {
+  hideSyncFailureAlert();
+});
+
+syncFailureSignInBtn.addEventListener('click', async () => {
+  hideSyncFailureAlert();
+  await onSignInWithGoogle();
 });
 
 emailSigninSubmitBtn.addEventListener('click', async () => {
@@ -1061,16 +1080,31 @@ async function uploadOneScreenshot(filePath: string, source: 'watcher' | 'backlo
     }
   } catch (error) {
     const message = toErrorMessage(error);
+    const authFailure = isAuthFailureMessage(message);
     await markUploadFailure(filePath, message);
+    addBacklogPaths([filePath]);
     setUploadStatus(seq, `failed (${message})`);
     failUploadProgress(seq);
+
     void reportAppError('upload_failed', error, {
       filePath,
-      source
+      source,
+      authFailure
     }, {
       endpoint: '/api/screenshots'
     });
     console.error('[smartshots] upload failed', { filePath, error, source });
+
+    if (authFailure) {
+      await handleAuthFailureDuringSync(message);
+    }
+
+    void showSyncFailureAlert({
+      message: authFailure
+        ? 'Smartshots needs you to sign in again before it can continue syncing. The screenshot was returned to the queue.'
+        : `Smartshots could not sync this screenshot: ${message}`,
+      requiresSignIn: authFailure
+    });
 
     if (store.getState().notificationsEnabled) {
       await sendNotification({
@@ -1233,6 +1267,10 @@ function hideSubscriptionAlert(): void {
   subscriptionAlertOverlay.hidden = true;
 }
 
+function hideSyncFailureAlert(): void {
+  syncFailureOverlay.hidden = true;
+}
+
 function maybeShowSignInReminder(context: 'startup' | 'focus' | 'auth-state'): void {
   if (!store.getState().authChecked) {
     return;
@@ -1274,6 +1312,36 @@ function maybeShowSubscriptionAlert(subscription: SubscriptionDetails): void {
   lastSubscriptionAlertKey = alertKey;
   subscriptionAlertText.textContent = buildSubscriptionAlertMessage(subscription);
   subscriptionAlertOverlay.hidden = false;
+}
+
+async function showSyncFailureAlert(args: { message: string; requiresSignIn: boolean }): Promise<void> {
+  syncFailureText.textContent = args.message;
+  syncFailureSignInBtn.hidden = !args.requiresSignIn;
+  syncFailureOverlay.hidden = false;
+
+  try {
+    await invoke('show_main_window');
+  } catch (error) {
+    console.warn('[smartshots] failed to reveal app window for sync alert', error);
+  }
+}
+
+async function handleAuthFailureDuringSync(message: string): Promise<void> {
+  try {
+    await supabase.clearLocalSession();
+  } catch (error) {
+    console.warn('[smartshots] failed to clear stale local auth session', error);
+  }
+
+  store.setState({
+    authChecked: true,
+    isAuthenticated: false,
+    authMessage: 'sign in required',
+    signedInUserLabel: '',
+    uploadMessage: `sync paused (${message})`
+  });
+  hideSignInReminder();
+  clearSubscriptionState();
 }
 
 function clearSubscriptionState(): void {
@@ -1365,6 +1433,12 @@ function reportAppError(
       is_authenticated: store.getState().isAuthenticated,
       ...metadata
     }
+  }).then((logged) => {
+    if (!logged) {
+      console.warn('[smartshots] app error not sent to remote log', { eventName, eventData, metadata });
+    }
+  }).catch((logError) => {
+    console.warn('[smartshots] app error log failed locally', { eventName, logError });
   });
 }
 
@@ -1493,6 +1567,10 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function isAuthFailureMessage(message: string): boolean {
+  return /not authenticated|unauthorized|forbidden|jwt|token|session|api upload failed \((401|403)\)/i.test(message);
 }
 
 function applySubscriptionState(response: SubscriptionStatusResponse): void {

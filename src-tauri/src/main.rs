@@ -189,6 +189,21 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn show_main_window(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+
+    #[cfg(target_os = "macos")]
+    let _ = app.set_dock_visibility(true);
+
+    window.show().map_err(|e| e.to_string())?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn run_watcher_thread(
     app: AppHandle,
     dirs: Vec<PathBuf>,
@@ -451,7 +466,8 @@ fn main() {
             get_oauth_redirect_url,
             set_hide_to_tray_on_close,
             open_website,
-            quit_app
+            quit_app,
+            show_main_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

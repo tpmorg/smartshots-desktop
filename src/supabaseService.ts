@@ -137,8 +137,7 @@ export class SupabaseService {
         redirectTo,
         skipBrowserRedirect: true,
         queryParams: {
-          access_type: 'offline',
-          prompt: 'consent'
+          prompt: 'select_account'
         }
       }
     });
@@ -214,6 +213,13 @@ export class SupabaseService {
 
   async signOut(): Promise<void> {
     const { error } = await this.supabase.auth.signOut();
+    if (error) {
+      throw error;
+    }
+  }
+
+  async clearLocalSession(): Promise<void> {
+    const { error } = await this.supabase.auth.signOut({ scope: 'local' });
     if (error) {
       throw error;
     }
